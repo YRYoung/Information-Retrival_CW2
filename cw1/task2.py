@@ -12,10 +12,9 @@ import pandas as pd
 from scipy.sparse import lil_matrix, csr_matrix
 from tqdm.auto import tqdm
 
-from task1 import preprocessing, tokens
+from cw1.task1 import preprocessing
 
-vocab_size = len(tokens)
-vocab_dict = dict(zip(tokens[:, 0], range(vocab_size)))
+verbose = __name__ == '__main__'
 
 
 def read_passages_csv(data_location='candidate-passages-top1000.tsv'):
@@ -32,12 +31,15 @@ def read_all_csv(data_location='candidate-passages-top1000.tsv'):
     return df.reset_index(drop=True)
 
 
-def generate_indexes(dataframe):
+def generate_indexes(dataframe, tokens, verbose=verbose):
     """
     Generate a matrix
     with size of (vocabulary size(how many tokens), passages size(how many passages))
     matrix[i,j] is the number of times the token vocab_dict[i] appears in the jth passage.
     """
+
+    vocab_size = len(tokens)
+    vocab_dict = dict(zip(tokens[:, 0], range(vocab_size)))
     passages_size = dataframe.shape[0]
     inverted_indexes = lil_matrix((vocab_size, passages_size))
     error_list = set()
@@ -55,17 +57,17 @@ def generate_indexes(dataframe):
         print(f'Words not in vocab: {error_list}')
     return csr_matrix(inverted_indexes)
 
+# passages_dataframe = read_passages_csv(data_location=f'{data_path}/dataset/candidate_passages_top1000.tsv')
+# file_name = f'{data_path}/temp/passages_indexes.pkl'
+# passages_indexes = generate_indexes(passages_dataframe)
 
-passages_dataframe = read_passages_csv()
-file_name = 'passages_indexes.pkl'
-verbose = __name__ == '__main__'
-if os.path.exists(file_name):
-    with open(file_name, 'rb') as file:
-        passages_indexes = pickle.load(file)
-else:
-    passages_indexes = generate_indexes(passages_dataframe)
-    with open(file_name, 'wb') as file:
-        pickle.dump(passages_indexes, file)
-
-if __name__ == '__main__':
-    print('indexing complete')
+# if os.path.exists(file_name):
+#     with open(file_name, 'rb') as file:
+#         passages_indexes = pickle.load(file)
+# else:
+#     passages_indexes = generate_indexes(passages_dataframe)
+#     with open(file_name, 'wb') as file:
+#         pickle.dump(passages_indexes, file)
+#
+# if __name__ == '__main__':
+#     print('indexing complete')

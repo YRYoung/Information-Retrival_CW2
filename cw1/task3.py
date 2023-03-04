@@ -14,11 +14,8 @@ from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import norm
 from scipy.sparse.sparsetools import csr_scale_rows, csr_scale_columns
 
-from task2 import generate_indexes, read_all_csv, passages_indexes, passages_dataframe
 
-__all__ = ['passages_indexes', 'queries_indexes',
-           'passages_dataframe', 'queries_dataframe', 'candidates_passages_dataframe',
-           'Help', 'select_first100']
+# __all__ = ['Help', 'select_first100']
 
 
 class Help:
@@ -83,30 +80,32 @@ def get_idf(inverted_indexes, np_log=np.log, add_half=False):
     return np_log((n - non_zeros + .5) / (non_zeros + .5)) if add_half else np_log(n / non_zeros)
 
 
-def select_first100(scores, remove_negative=True):
-    result = np.zeros((200 * 100, 3)) * np.nan
-    for i in trange(200):
+def select_first_n(scores, passages_dataframe, queries_dataframe, pairs_dataframe,
+                   file_path, remove_negative=True, first_n=1000):
+    size = len(queries_dataframe)
+    result = np.zeros((first_n, 3)) * np.nan
+    for i in trange(size):
+        result *= np.nan
         qid = queries_dataframe.loc[i].qid
-        candidates_pids = candidates_passages_dataframe[candidates_passages_dataframe.qid == qid].pid.values
-        candidates_pids_idxs = passages_dataframe[passages_dataframe.pid.isin(candidates_pids)].index.values
+        candidates_pids = pairs_dataframe[pairs_dataframe.qid == qid].pid.values
+        candidates_pids_idxs = passages_dataframe[passages_dataframe['pid'].isin(candidates_pids).values].index.values
+        # passages_dataframe[passages_dataframe.pid.isin(candidates_pids)].index.values
 
         score = scores[i, candidates_pids_idxs]
 
+        first_n_idx = np.argsort(score)[::-1][:first_n]
 
-        first_100 = np.argsort(score)[::-1][:100]
-
-        indexes = first_100[score[first_100] > 0] if remove_negative else first_100
+        indexes = first_n_idx[score[first_n_idx] > 0] if remove_negative else first_n_idx
 
         pids = candidates_pids[indexes]
 
-        result_idx = i * 100
-        result[result_idx:result_idx + 100, 0] = qid
-        result[result_idx:result_idx + len(indexes), 1] = pids
-        result[result_idx:result_idx + len(indexes), 2] = score[indexes]
+        result[:, 0] = qid
+        result[: len(indexes), 1] = pids
+        result[: len(indexes), 2] = score[indexes]
 
-    result = pd.DataFrame(result, columns=['qid', 'pid', 'score']).dropna()
-    result[['pid', 'qid']] = result[['pid', 'qid']].astype(int)
-    return result
+        df = pd.DataFrame(result, columns=['qid', 'pid', 'score']).dropna()
+        df[['pid', 'qid']] = df[['pid', 'qid']].astype(int)
+        df.to_csv(file_path, header=False, index=False, mode='a+')
 
 
 def get_p_length_normalized(inverted_indexes_p):
@@ -115,22 +114,35 @@ def get_p_length_normalized(inverted_indexes_p):
     return doc_len / avdl
 
 
-def get_bm25(tf_p, tf_q, idf, p_len_normalized, k1=1.2, k2=100, b=.75):
-    K = k1 * ((1 - b) + b * p_len_normalized)  # different for every passage
+class BM25Score:
+    def __init__(self, tf_p, tf_q, idf, p_len_normalized, k1=1.2, k2=100, b=.75):
+        # setting k1 = 1.2, k2 = 100, and b = 0.75.
 
-    temp0 = ((k1 + 1) * tf_p)
-    temp1 = Help.sparse_add_vec(tf_p, K)
-    temp1.data = 1 / temp1.data
-    S1 = temp0.multiply(temp1)
+        self.tf_p = tf_p  # (vocab_n, doc_n)
+        self.idf = idf  # (vocab_n, )
 
-    left = Help.scale_csr(S1, idf)
+        self.K = k1 * ((1 - b) + b * p_len_normalized)  # (1, doc_n)
+        self.temp0 = ((k1 + 1) * tf_p)  # (vocab_n, doc_n)
 
-    temp0 = ((k2 + 1) * tf_q)
-    temp1 = tf_q.copy()
-    temp1.data = 1 / (temp1.data + k2)
-    right = temp0.multiply(temp1)
+        temp0 = ((k2 + 1) * tf_q)
+        temp1 = tf_q.copy()
+        temp1.data = 1 / (temp1.data + k2)
+        self.right = temp0.multiply(temp1).T
 
-    return right.T @ left
+    def __getitem__(self, item):
+        i, j = item
+        temp0 = self.temp0[:, j]  # (vocab_n, j_len)
+        temp1 = 1 / (self.tf_p[:, j] + self.K[:, j])  # (vocab_n, j_len)
+
+        S1 = temp0.multiply(temp1)  # (vocab_n, j_len)
+
+        left = Help.scale_csr(S1, self.idf)
+
+        return (self.right[i] @ left).toarray().reshape(-1)
+
+
+def get_bm25(tf_p, tf_q, idf, p_len_normalized):
+    return BM25Score(tf_p, tf_q, idf, p_len_normalized)
 
 
 verbose = __name__ == '__main__'
@@ -139,56 +151,3 @@ verbose = __name__ == '__main__'
 def ifprint(s, **kwargs):
     if verbose:
         print(s, **kwargs)
-
-
-ifprint('Loading dataframes from files')
-queries_dataframe = read_queries_csv()
-queries_indexes = generate_indexes(queries_dataframe)
-candidates_passages_dataframe = read_all_csv()
-
-if __name__ == '__main__':
-    # 1. Extract IDF
-    ifprint('Extract IDF')
-    idf = get_idf(passages_indexes)
-
-    # 2. Extract TF-IDF of passages
-    ifprint('Extract TF-IDF of passages')
-    passages_tf = get_tf(passages_indexes)
-    passages_tfidf = generate_tf_idf(passages_tf, idf)
-
-    # 3. Using idf_psgs, extract TF-IDF of queries.
-    ifprint('Extract the TF-IDF of queries')
-
-    queries_tf = get_tf(queries_indexes)
-    queries_tfidf = generate_tf_idf(queries_tf, idf)
-
-    # 4. Use a basic vector space model with TF-IDF and cosine similarity
-    ifprint('Calculate cosine similarity scores')
-    similarity_scores = Help.cosine_similarity(queries_tfidf, passages_tfidf)
-
-    # 5. retrieve at most 100 passages from the 1000 passages for each query
-    # no headers, expected to have 19,290 rows
-    ifprint('Retrieve passages for each query', end=' ')
-    similarity_result = select_first100(similarity_scores) # (200, 182469)
-    ifprint(f'rows:{similarity_result.shape[0]}')
-
-    # 6. Store the outcomes in a file named tfidf.csv
-    ifprint('Store results')
-    similarity_result.to_csv('tfidf.csv', header=False, index=False)
-
-    # 7. Use inverted index to implement BM25
-    # while setting k1 = 1.2, k2 = 100, and b = 0.75.
-    ifprint('Calculate BM25 scores')
-    bm25_scores = get_bm25(tf_p=passages_tf, tf_q=queries_tf, idf=idf,
-                           p_len_normalized=get_p_length_normalized(passages_indexes)).toarray()
-
-    # 8. Retrieve at most 100 passages from within the 1000 passages for each query.
-    ifprint('Retrieve passages for each query', end=' ')
-    bm25_result = select_first100(bm25_scores)
-    ifprint(f'rows:{bm25_result.shape[0]}')
-
-    # 9. Store the outcomes in a file named bm25.csv
-    ifprint('Store results')
-    bm25_result.to_csv('bm25.csv', header=False, index=False)
-
-    ifprint('------complete------')
