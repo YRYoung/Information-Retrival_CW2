@@ -167,10 +167,3 @@ if __name__ == '__main__':
     eval_df = eval_scores(bm25_scores, all_df, queries_df)
     eval_df.to_csv(f'{data_path}/temp/eval_bm25_val.csv', header=True, index=False)
 
-    relevant_pairs = all_df[all_df.relevancy == 1][['qid', 'pid']]
-    relevant_pairs_scores = pd.merge(bm25_scores, relevant_pairs, on=['qid', 'pid'])
-    print(relevant_pairs_scores.score.mean())
-
-    irrelevant_pairs = all_df[all_df.relevancy != 1][['qid', 'pid']]
-    irrelevant_pairs_scores = pd.merge(bm25_scores, irrelevant_pairs, on=['qid', 'pid'])
-    print(irrelevant_pairs_scores.score.mean())
