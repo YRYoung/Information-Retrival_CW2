@@ -120,10 +120,62 @@ def eval_scores(scores, df, queries_df, log=np.log2):
 
 
 if __name__ == '__main__':
-    tokens = get_tokens(load=True)
-    all_df, passages_df, queries_df = get_dfs(csv_path=f'{data_path}/part2/validation_data.tsv')
-    passages_indexes, queries_indexes = get_indexes(tokens, passages_df, queries_df, load=True)
-    bm25_scores = get_bm25_var(passages_indexes, queries_indexes, passages_df, queries_df, all_df, load=True)
+
+    def _get_tokens(load=True, use_stop_words=False):
+        vocab_file_name = [f'{output_path}/vocab.npy', f'{output_path}/vocab_no_sw.npy']
+        if not load:
+            vocab_txt = f'{data_path}/part2/validation_data.tsv'
+
+            tokens = np.array(preprocessing(read_txt(vocab_txt), remove_stop_words=False, verbose=True))
+            np.save(vocab_file_name[0], tokens)
+
+            tokens_no_sw = remove_stop_words(tokens)
+            np.save(vocab_file_name[1], tokens_no_sw)
+        else:
+            tokens = np.load(vocab_file_name[0])
+            tokens_no_sw = np.load(vocab_file_name[1])
+        return tokens if use_stop_words else tokens_no_sw
+
+
+    def _get_indexes(tokens, p_df, q_df, load=True, verbose=True,
+                     file_path=(f'{output_path}/var_passages_idx.pkl', f'{output_path}/var_queries_idx.pkl')):
+        if load:
+            with open(file_path[0], 'rb') as file:
+                p_idx = pickle.load(file)
+            with open(file_path[1], 'rb') as file:
+                q_idx = pickle.load(file)
+        else:
+
+            p_idx = generate_indexes(p_df, tokens, verbose=verbose)
+            q_idx = generate_indexes(q_df, tokens, verbose=verbose)
+            with open(file_path[0], 'wb') as file:
+                pickle.dump(p_idx, file)
+
+            with open(file_path[1], 'wb') as file:
+                pickle.dump(q_idx, file)
+
+        return p_idx, q_idx
+
+
+    def _get_bm25_var(p_idx, q_idx, p_df, q_df, df, load=False, first_n=100):
+        file_path = f'{output_path}/bm25.csv'
+        if not load:
+            print('Calculate BM25 scores')
+            bm25_scores = get_bm25(tf_p=p_idx, tf_q=q_idx,
+                                   idf=get_idf(p_idx, add_half=True),
+                                   p_len_normalized=get_p_length_normalized(p_idx))
+
+            select_first_n(bm25_scores, p_df, q_df, df, file_path=file_path, first_n=first_n)
+            print('------complete------')
+        return pd.read_csv(file_path, header=None, names=['qid', 'pid', 'score'])
+
+
+    tokens = _get_tokens(load=True)
+    all_df, passages_df, queries_df = to_dataframes(csv_path=f'{data_path}/part2/validation_data.tsv')
+    passages_indexes, queries_indexes = _get_indexes(tokens, passages_df, queries_df, load=True)
+    bm25_scores = _get_bm25_var(passages_indexes, queries_indexes,
+                                passages_df, queries_df, all_df,
+                                load=True, first_n=100)
 
     eval_df = eval_scores(bm25_scores, all_df, queries_df)
     eval_df.to_csv(f'{data_path}/temp/eval_bm25_val.csv', header=True, index=False)
