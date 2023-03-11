@@ -18,3 +18,15 @@ Analyze the effect of the learning rate on the model training loss.
 
 (All implementations for logistic regression algorithm must be your own for this part.)
 """
+
+from flair.embeddings import TransformerWordEmbeddings
+from flair.data import Sentence
+
+# init embedding
+embedding = TransformerWordEmbeddings('bert-base-uncased')
+
+# create a sentence
+sentence = Sentence('The grass is green.')
+
+# embed words in sentence
+embedding.embed(sentence)
