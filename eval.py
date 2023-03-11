@@ -20,26 +20,14 @@ from cw1.task1 import *
 from cw1.task2 import *
 from cw1.task3 import *
 from tqdm import trange
+
 data_path = './data'
+output_path = f'{data_path}/temp'
+
+__all__ = ['eval_scores']
 
 
-def get_tokens(load=True, use_stop_words=False):
-    vocab_file_name = [f'{data_path}/temp/vocab.npy', f'{data_path}/temp/vocab_no_sw.npy']
-    if not load:
-        vocab_txt = f'{data_path}/part2/validation_data.tsv'
-
-        tokens = np.array(preprocessing(read_txt(vocab_txt), remove_stop_words=False, verbose=True))
-        np.save(vocab_file_name[0], tokens)
-
-        tokens_no_sw = remove_stop_words(tokens)
-        np.save(vocab_file_name[1], tokens_no_sw)
-    else:
-        tokens = np.load(vocab_file_name[0])
-        tokens_no_sw = np.load(vocab_file_name[1])
-    return tokens if use_stop_words else tokens_no_sw
-
-
-def get_dfs(csv_path=f'{data_path}/dataset/candidate_passages_top1000.tsv'):
+def to_dataframes(csv_path):
     def read_csv(csv_path):
         df = pd.read_csv(csv_path,
                          sep='\t', header=0,
@@ -165,5 +153,5 @@ if __name__ == '__main__':
                                 load=True, first_n=100)
 
     eval_df = eval_scores(bm25_scores, all_df, queries_df)
-    eval_df.to_csv(f'{data_path}/temp/eval_bm25_val.csv', header=True, index=False)
+    eval_df.to_csv(f'{output_path}/eval_bm25_val.csv', header=True, index=False)
 
