@@ -56,62 +56,39 @@ def get_dfs(csv_path=f'{data_path}/dataset/candidate_passages_top1000.tsv'):
     return df, p_df, q_df
 
 
-def get_indexes(tokens, p_df, q_df, load=True, verbose=True,
-                file_path=(f'{data_path}/temp/var_passages_idx.pkl', f'{data_path}/temp/var_queries_idx.pkl')):
-    if load:
-        with open(file_path[0], 'rb') as file:
-            p_idx = pickle.load(file)
-        with open(file_path[1], 'rb') as file:
-            q_idx = pickle.load(file)
-    else:
-
-        p_idx = generate_indexes(p_df, tokens, verbose=verbose)
-        q_idx = generate_indexes(q_df, tokens, verbose=verbose)
-        with open(file_path[0], 'wb') as file:
-            pickle.dump(p_idx, file)
-
-        with open(file_path[1], 'wb') as file:
-            pickle.dump(q_idx, file)
-
-    return p_idx, q_idx
-
-
-def get_bm25_var(p_idx, q_idx, p_df, q_df, df, load=False):
-    file_path = f'{data_path}/temp/bm25.csv'
-    if not load:
-        print('Calculate BM25 scores')
-        bm25_scores = get_bm25(tf_p=p_idx, tf_q=q_idx,
-                               idf=get_idf(p_idx, add_half=True),
-                               p_len_normalized=get_p_length_normalized(p_idx))
-
-        select_first_n(bm25_scores, p_df, q_df, df, file_path=file_path)
-        print('------complete------')
-    return pd.read_csv(file_path, header=None, names=['qid', 'pid', 'score'])
-
-
-def eval_scores(scores, df, queries_df, log=np.log2):
+def eval_scores(scores, df, queries_df, log=np.log2, at: list[int] = [3, 10, 100]):
     size = len(queries_df)
-    ndcg = np.zeros(size)
-    precisions = np.zeros(size)
+    ndcg = np.zeros((len(at), size))
+    precisions = np.zeros((len(at), size))
+
     for i in trange(size):
         qid = queries_df.loc[i].qid
         query_df = scores[scores['qid'] == qid].reset_index()
 
+        # true relevant
         relevant_pid = df[(df['qid'] == qid) & (df.relevancy == 1)].pid.values
-        relevant_idx = query_df[query_df.pid.isin(relevant_pid)].index.values
-
+        relevant_idx = query_df[query_df.pid.isin(relevant_pid)].index.values + 1
         # assert len(relevant_pid) == 1, f'i = {i}, qid = {qid}'
-        if len(relevant_idx) == 0:
-            continue
+        # a query may correspond to 2 passages, but the relevancy is always 1
+
         with warnings.catch_warnings(record=True) as w:
-            dcg = 1 / log(2 + relevant_idx)
+            dcg = 1 / log(1 + relevant_idx)
             if len(w) > 0:
                 print(i)
-        best = 1 / log(2 + np.arange(len(relevant_pid)))
-        ndcg[i] = np.sum(dcg) / np.sum(best)
 
-        precision = (np.arange(len(relevant_idx)) + 1) / (relevant_idx + 1)
-        precisions[i] = np.sum(precision) / len(relevant_pid)
+        for j, now in enumerate(at):
+            relevant_retrieved_idx = relevant_idx[relevant_idx <= now]
+            total_relevant_retrieved = len(relevant_retrieved_idx)
+            if total_relevant_retrieved == 0:
+                assert not total_relevant_retrieved
+                assert not relevant_retrieved_idx
+                continue
+
+            precision = (np.arange(total_relevant_retrieved) + 1) / relevant_retrieved_idx
+            precisions[j, i] = np.sum(precision) / total_relevant_retrieved
+
+            ideal_dgc = np.sum(1 / log(2 + np.arange(total_relevant_retrieved)))
+            ndcg[j, i] = np.sum(dcg[:now]) / ideal_dgc
 
     eval_df = queries_df.qid.copy()
     eval_df['precision'] = precisions
