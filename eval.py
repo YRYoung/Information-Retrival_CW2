@@ -91,8 +91,18 @@ def eval_scores(scores, df, queries_df, log=np.log2, at: list[int] = [3, 10, 100
             ndcg[j, i] = np.sum(dcg[:now]) / ideal_dgc
 
     eval_df = queries_df.qid.copy()
-    eval_df['precision'] = precisions
-    eval_df['NDCG'] = ndcg
+
+    for j, now in enumerate(at):
+        eval_df[f'precision@{now}'] = precisions[j, :]
+        eval_df[f'NDCG@{now}'] = ndcg[j, :]
+
+    avg_precision = np.mean(precisions, axis=1)
+    avg_ndcg = np.mean(ndcg, axis=1)
+
+    [print(f'Average Precision @ {now}: {value}') for now, value in zip(at, avg_precision)]
+    print('-' * 20)
+    [print(f'Average NDCG @ {now}: {value}') for now, value in zip(at, avg_ndcg)]
+
     return eval_df
 
 
