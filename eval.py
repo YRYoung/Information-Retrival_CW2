@@ -6,6 +6,9 @@ Compute the performance of using BM25 as the retrieval model on the validation d
 Your marks for this part will mainly depend on the implementation of metrics 
 (as opposed to your implementation of BM25,
 since we already focused on that as part of the first assignment).
+---------------------------------------------------------------------
+Report: mAP@3, 10, 100 and NDCG@3, 10, 100
+mAP should be a single value regardless of individual query
 """
 import warnings
 
