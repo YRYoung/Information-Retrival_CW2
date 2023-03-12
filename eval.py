@@ -78,27 +78,8 @@ def eval_scores(scores, df, queries_df, log=np.log2, at: list[int] = [3, 10, 100
         # true relevant
         relevant_pid = df[(df['qid'] == qid) & (df.relevancy == 1)].pid.values
         relevant_idx = query_df[query_df.pid.isin(relevant_pid)].index.values + 1
-        # assert len(relevant_pid) == 1, f'i = {i}, qid = {qid}'
-        # a query may correspond to 2 passages, but the relevancy is always 1
 
-        with warnings.catch_warnings(record=True) as w:
-            dcg = 1 / log(1 + relevant_idx)
-            if len(w) > 0:
-                print(i)
-
-        for j, now in enumerate(at):
-            relevant_retrieved_idx = relevant_idx[relevant_idx <= now]
-            total_relevant_retrieved = len(relevant_retrieved_idx)
-            if total_relevant_retrieved == 0:
-                assert not total_relevant_retrieved
-                assert not relevant_retrieved_idx
-                continue
-
-            precision = (np.arange(total_relevant_retrieved) + 1) / relevant_retrieved_idx
-            precisions[j, i] = np.sum(precision) / total_relevant_retrieved
-
-            ideal_dgc = np.sum(1 / log(2 + np.arange(total_relevant_retrieved)))
-            ndcg[j, i] = np.sum(dcg[:now]) / ideal_dgc
+        precisions[:, i], ndcg[:, i] = eval_per_query(relevant_idx, at=at, log=log)
 
     eval_df = queries_df.qid.copy()
 
