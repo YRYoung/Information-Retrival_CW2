@@ -9,10 +9,13 @@ since we already focused on that as part of the first assignment).
 ---------------------------------------------------------------------
 Report: mAP@3, 10, 100 and NDCG@3, 10, 100
 mAP should be a single value regardless of individual query
-"""
-import warnings
 
-import numpy as np
+https://medium.com/swlh/rank-aware-recsys-evaluation-metrics-5191bba16832
+https://towardsdatascience.com/mean-average-precision-at-k-map-k-clearly-explained-538d8e032d2
+"""
+
+from huepy import *
+from pandas import DataFrame
 
 import pandas as pd
 
@@ -87,9 +90,9 @@ def eval_scores(scores, df, queries_df, log=np.log2, at: list[int] = [3, 10, 100
     avg_precision = np.mean(precisions, axis=1)
     avg_ndcg = np.mean(ndcg, axis=1)
 
-    [print(f'Average Precision @ {now}: {value}') for now, value in zip(at, avg_precision)]
-    print('-' * 20)
-    [print(f'Average NDCG @ {now}: {value}') for now, value in zip(at, avg_ndcg)]
+    [print(blue(italic(f'Average Precision @ {now}: {value}'))) for now, value in zip(at, avg_precision)]
+    print('-' * 40)
+    [print(orange(italic(f'Average NDCG @ {now}: {value}'))) for now, value in zip(at, avg_ndcg)]
 
     return eval_df
 
