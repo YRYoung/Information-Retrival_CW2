@@ -28,13 +28,14 @@ output_path = f'{data_path}/temp0'
 __all__ = ['eval_scores', 'read_csv', 'data_path']
 
 
-def to_dataframes(csv_path):
-    def read_csv(csv_path):
-        df = pd.read_csv(csv_path,
-                         sep='\t', header=0,
-                         names=['qid', 'pid', 'query', 'passage', 'relevancy']).drop_duplicates()
-        return df.reset_index(drop=True)
+def read_csv(csv_path) -> pd.DataFrame:
+    df = pd.read_csv(csv_path,
+                     sep='\t', header=0,
+                     names=['qid', 'pid', 'query', 'passage', 'relevancy']).drop_duplicates()
+    return df.reset_index(drop=True)
 
+
+def to_dataframes(csv_path) -> tuple[DataFrame, DataFrame, DataFrame]:
     df = read_csv(csv_path)
 
     p_df = df[['pid', 'passage']].drop_duplicates().reset_index(drop=True)
