@@ -57,17 +57,4 @@ def generate_indexes(dataframe, tokens, verbose=verbose):
         print(f'Words not in vocab: {error_list}')
     return csr_matrix(inverted_indexes)
 
-# passages_dataframe = read_passages_csv(data_location=f'{data_path}/dataset/candidate_passages_top1000.tsv')
-# file_name = f'{data_path}/temp/passages_indexes.pkl'
-# passages_indexes = generate_indexes(passages_dataframe)
-
-# if os.path.exists(file_name):
-#     with open(file_name, 'rb') as file:
-#         passages_indexes = pickle.load(file)
-# else:
-#     passages_indexes = generate_indexes(passages_dataframe)
-#     with open(file_name, 'wb') as file:
-#         pickle.dump(passages_indexes, file)
 #
-# if __name__ == '__main__':
-#     print('indexing complete')
