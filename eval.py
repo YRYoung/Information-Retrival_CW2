@@ -146,13 +146,15 @@ def _get_bm25_var(p_idx, q_idx, p_df, q_df, df, load=False, first_n=100):
     return pd.read_csv(file_path, header=None, names=['qid', 'pid', 'score'])
 
 
-    tokens = _get_tokens(load=True)
-    all_df, passages_df, queries_df = to_dataframes(csv_path=f'{data_path}/part2/validation_data.tsv')
-    passages_indexes, queries_indexes = _get_indexes(tokens, passages_df, queries_df, load=True)
+if __name__ == '__main__':
+    tokens = _get_tokens(load=False, vocab_txt=f'{data_path}/part2/train_data.tsv')
+    all_df, passages_df, queries_df = to_dataframes(csv_path=f'{data_path}/part2/train_data.tsv')
+    passages_indexes, queries_indexes = _get_indexes(tokens, passages_df, queries_df, load=False,
+                                                     file_path=(f'{output_path}/train_passages_idx.pkl',
+                                                                f'{output_path}/train_queries_idx.pkl'))
     bm25_scores = _get_bm25_var(passages_indexes, queries_indexes,
                                 passages_df, queries_df, all_df,
-                                load=True, first_n=100)
+                                load=False, first_n=100)
 
     eval_df = eval_scores(bm25_scores, all_df, queries_df)
-    eval_df.to_csv(f'{output_path}/eval_bm25_val.csv', header=True, index=False)
-
+    eval_df.to_csv(f'{output_path}/eval_bm25_train.csv', header=True, index=False)
