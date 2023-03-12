@@ -1,6 +1,6 @@
 """
 Logistic Regression (LR)(25 marks)
-
+---------------------------------------
 Represent passages and query based on a word embedding method,
 (such as Word2Vec, GloVe, FastText, or ELMo).
 
@@ -17,6 +17,7 @@ report the performance of your model based on the validation data.
 Analyze the effect of the learning rate on the model training loss.
 
 (All implementations for logistic regression algorithm must be your own for this part.)
+
 """
 
 from flair.embeddings import TransformerWordEmbeddings
