@@ -17,15 +17,13 @@ https://towardsdatascience.com/mean-average-precision-at-k-map-k-clearly-explain
 from huepy import *
 from pandas import DataFrame
 
-import pandas as pd
 
 from cw1.task1 import *
 from cw1.task2 import *
 from cw1.task3 import *
-from tqdm import trange
 
 data_path = './data'
-output_path = f'{data_path}/temp'
+output_path = f'{data_path}/temp0'
 
 __all__ = ['eval_scores']
 
