@@ -25,7 +25,7 @@ from cw1.task3 import *
 data_path = './data'
 output_path = f'{data_path}/temp0'
 
-__all__ = ['eval_scores']
+__all__ = ['eval_scores', 'read_csv', 'data_path']
 
 
 def to_dataframes(csv_path):
