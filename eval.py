@@ -45,7 +45,27 @@ def to_dataframes(csv_path):
     return df, p_df, q_df
 
 
-def eval_scores(scores, df, queries_df, log=np.log2, at: list[int] = [3, 10, 100]):
+def eval_per_query(relevant_idx, at: list[int], log=np.log):
+    dcg = 1 / log(1 + relevant_idx)
+    precisions, ndcg = np.zeros(len(at)), np.zeros(len(at))
+
+    for j, now in enumerate(at):
+        relv_retd_idx = relevant_idx[relevant_idx <= now]
+        total_relv_retd = len(relv_retd_idx)
+        if not relv_retd_idx:
+            continue
+
+        precision = (np.arange(total_relv_retd) + 1) / relv_retd_idx
+        precisions[j] = np.sum(precision) / total_relv_retd
+
+        ideal_dgc = np.sum(1 / log(2 + np.arange(total_relv_retd)))
+        ndcg[j] = np.sum(dcg[:now]) / ideal_dgc
+
+    return precisions, ndcg
+
+
+def eval_scores(scores, df, queries_df, log=np.log2, at: list[int] = [3, 10, 100]) -> DataFrame:
+    # a query may correspond to 2 passages, but the relevancy is always 1
     size = len(queries_df)
     ndcg = np.zeros((len(at), size))
     precisions = np.zeros((len(at), size))
