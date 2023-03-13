@@ -3,40 +3,40 @@ import pandas as pd
 import torch
 from flair.data import Sentence
 
-from eval import data_path, read_csv
+from eval import read_csv
+
+data_path = '../data'
 
 output_path = f'{data_path}/temp1'
 val_tsv = f'{data_path}/part2/validation_data.tsv'
 train_tsv = f'{data_path}/part2/train_data.tsv'
 sample_tsv = f'{data_path}/part2/sample_data.tsv'
 
-out_file = f'{output_path}/train_data_raw.parquet.gzip'
+out_file_train = f'{output_path}/train_data_raw.parquet.gzip'
 
 
-def add_q_idx():
-    df = read_csv(train_tsv)
-    df1 = df.sort_values(by=['qid', 'relevancy'], ascending=[True, False])
+def add_q_idx(dataframe=read_csv(train_tsv),
+              save=out_file_train):
+    df1 = dataframe.sort_values(by=['qid', 'relevancy'], ascending=[True, False])
     _, count_repeats = np.unique(df1.qid.values, return_counts=True)
 
     df1['q_idx'] = np.repeat(np.arange(len(count_repeats)), count_repeats)
 
     df1['p_idx'] = np.hstack([np.arange(bb) for bb in count_repeats])
-    df1.to_parquet(out_file, compression='gzip')
+    df1.to_parquet(save, compression='gzip')
 
 
-def clean():
-    df = pd.read_parquet(out_file)
-    choose = df['relevancy'] == 0
-    bg_df = df[choose]
-    target_df = df[~choose]
+def clean(dataframe=pd.read_parquet(out_file_train),
+          save=f'{output_path}/train_data_del9.parquet.gzip'):
+    choose = dataframe['relevancy'] == 0
+    bg_df = dataframe[choose]
+    target_df = dataframe[~choose]
 
     selected_bg_df = bg_df.sample(n=len(bg_df) // 10, random_state=1)
     selected_df = pd.concat([selected_bg_df, target_df])
     selected_df = selected_df.sort_values(by=['qid', 'relevancy', 'p_idx'], ascending=[True, False, True])
 
-    out_file2 = f'{output_path}/train_data_del9.parquet.gzip'
-    selected_df.to_parquet(out_file2, compression='gzip')
-
+    selected_df.to_parquet(save, compression='gzip')
 
 
 # @lru_cache(maxsize=None)
@@ -58,4 +58,3 @@ def _processing(all_df, embedding):
     y = torch.tensor(all_df.relevancy.values, dtype=torch.float32)  # (N, ) float32
 
     return x, y
-
