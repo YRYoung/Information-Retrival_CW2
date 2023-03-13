@@ -13,19 +13,86 @@ mAP should be a single value regardless of individual query
 https://medium.com/swlh/rank-aware-recsys-evaluation-metrics-5191bba16832
 https://towardsdatascience.com/mean-average-precision-at-k-map-k-clearly-explained-538d8e032d2
 """
-
+import torch
 from huepy import *
 from pandas import DataFrame
-
 
 from cw1.task1 import *
 from cw1.task2 import *
 from cw1.task3 import *
+from utils import data_path, timeit, val_raw_df
 
-data_path = './data'
 output_path = f'{data_path}/temp0'
 
-__all__ = ['eval_scores', 'read_csv', 'data_path']
+__all__ = ['read_csv', 'eval_per_query', 'init_evaluator']
+
+
+@timeit
+def init_evaluator(at: list = [3, 10, 100], x_val_handler=None):
+    val_df = pd.read_parquet(val_raw_df)
+    del val_df['query']
+    del val_df['passage']
+    del val_df['qid']
+    del val_df['pid']
+    x_val = torch.load('./data/val_embeddings.pth')[0]
+
+    if x_val_handler is not None:
+        x_val = x_val_handler(x_val)
+
+    _, count_repeats = np.unique(val_df.q_idx.values, return_counts=True)
+    p_idx = np.hstack([np.arange(count) for count in count_repeats])
+    num_queries = len(count_repeats)
+
+    precisions = np.zeros((len(at), num_queries))
+    ndcgs = np.zeros((len(at), num_queries))
+
+    @timeit
+    def eval_one(pred_callback):
+        val_df['predict_relevancy'] = pred_callback(x_val)
+
+        df = val_df.sort_values(by=['q_idx', 'predict_relevancy'], ascending=[True, False])
+        del val_df['predict_relevancy']
+
+        df['p_idx'] = p_idx
+        retrieved_relevant = df[df['relevancy'] == 1][['q_idx', 'p_idx']]
+
+        _, idx, counts = np.unique(retrieved_relevant['q_idx'], return_counts=True, return_index=True)
+
+        for i, (start, l) in enumerate(zip(idx, counts)):
+            rel_idx = retrieved_relevant[start:start + l]['p_idx'].values + 1
+            precision, ndcg = eval_per_query(rel_idx, at)
+            precisions[:, i] = precision
+            ndcgs[:, i] = ndcg
+
+        avg_precision = np.mean(precisions, axis=1)
+        avg_ndcg = np.mean(ndcgs, axis=1)
+
+        [print(blue(italic(f'mAP @ {now}: {value}'))) for now, value in zip(at, avg_precision)]
+        [print(orange(italic(f'NDCG @ {now}: {value}'))) for now, value in zip(at, avg_ndcg)]
+
+        return avg_precision, avg_ndcg
+
+    return lambda a: eval_one(a)
+
+
+def eval_per_query(relev_rank, at: list[int], log=np.log):
+    dcg = 1 / log(1 + relev_rank)
+    # todo: np.cumsum(a)
+    precisions, ndcg = np.zeros(len(at)), np.zeros(len(at))
+
+    for j, now in enumerate(at):
+        relev_rank_now = relev_rank[relev_rank <= now]
+        num__relev = len(relev_rank_now)
+        if num__relev == 0:
+            continue
+
+        precision = (np.arange(num__relev) + 1) / relev_rank_now
+        precisions[j] = np.sum(precision) / num__relev
+
+        ideal_dgc = np.sum(1 / log(2 + np.arange(num__relev)))
+        ndcg[j] = np.sum(dcg[:now]) / ideal_dgc
+
+    return precisions, ndcg
 
 
 def read_csv(csv_path) -> pd.DataFrame:
@@ -35,7 +102,7 @@ def read_csv(csv_path) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
-def to_dataframes(csv_path) -> tuple[DataFrame, DataFrame, DataFrame]:
+def _to_dataframes(csv_path) -> tuple[DataFrame, DataFrame, DataFrame]:
     df = read_csv(csv_path)
 
     p_df = df[['pid', 'passage']].drop_duplicates().reset_index(drop=True)
@@ -46,26 +113,7 @@ def to_dataframes(csv_path) -> tuple[DataFrame, DataFrame, DataFrame]:
     return df, p_df, q_df
 
 
-def eval_per_query(relevant_idx, at: list[int], log=np.log):
-    dcg = 1 / log(1 + relevant_idx)
-    precisions, ndcg = np.zeros(len(at)), np.zeros(len(at))
-
-    for j, now in enumerate(at):
-        relv_retd_idx = relevant_idx[relevant_idx <= now]
-        total_relv_retd = len(relv_retd_idx)
-        if not relv_retd_idx:
-            continue
-
-        precision = (np.arange(total_relv_retd) + 1) / relv_retd_idx
-        precisions[j] = np.sum(precision) / total_relv_retd
-
-        ideal_dgc = np.sum(1 / log(2 + np.arange(total_relv_retd)))
-        ndcg[j] = np.sum(dcg[:now]) / ideal_dgc
-
-    return precisions, ndcg
-
-
-def eval_scores(scores, df, queries_df, log=np.log2, at: list[int] = [3, 10, 100]) -> DataFrame:
+def _eval_scores(scores, df, queries_df, log=np.log2, at: list[int] = [3, 10, 100]) -> DataFrame:
     # a query may correspond to 2 passages, but the relevancy is always 1 or 0
     size = len(queries_df)
     ndcg = np.zeros((len(at), size))
@@ -113,9 +161,8 @@ def _get_tokens(load=True, use_stop_words=False, vocab_txt=f'{data_path}/part2/v
     return tokens if use_stop_words else tokens_no_sw
 
 
-def _get_indexes(tokens, p_df, q_df, load=True, verbose=True,
-                 file_path=(f'{output_path}/var_passages_idx.pkl',
-                            f'{output_path}/var_queries_idx.pkl')):
+def _get_indexes(tokens, p_df, q_df, load=True, verbose=True, file_path=(f'{output_path}/var_passages_idx.pkl',
+                                                                         f'{output_path}/var_queries_idx.pkl')):
     if load:
         with open(file_path[0], 'rb') as file:
             p_idx = pickle.load(file)
@@ -149,7 +196,7 @@ def _get_bm25_var(p_idx, q_idx, p_df, q_df, df, load=False, first_n=100):
 
 if __name__ == '__main__':
     tokens = _get_tokens(load=False, vocab_txt=f'{data_path}/part2/train_data.tsv')
-    all_df, passages_df, queries_df = to_dataframes(csv_path=f'{data_path}/part2/train_data.tsv')
+    all_df, passages_df, queries_df = _to_dataframes(csv_path=f'{data_path}/part2/train_data.tsv')
     passages_indexes, queries_indexes = _get_indexes(tokens, passages_df, queries_df, load=False,
                                                      file_path=(f'{output_path}/train_passages_idx.pkl',
                                                                 f'{output_path}/train_queries_idx.pkl'))
@@ -157,5 +204,5 @@ if __name__ == '__main__':
                                 passages_df, queries_df, all_df,
                                 load=False, first_n=100)
 
-    eval_df = eval_scores(bm25_scores, all_df, queries_df)
+    eval_df = _eval_scores(bm25_scores, all_df, queries_df)
     eval_df.to_csv(f'{output_path}/eval_bm25_train.csv', header=True, index=False)
