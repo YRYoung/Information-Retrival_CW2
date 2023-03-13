@@ -66,7 +66,7 @@ def eval_per_query(relevant_idx, at: list[int], log=np.log):
 
 
 def eval_scores(scores, df, queries_df, log=np.log2, at: list[int] = [3, 10, 100]) -> DataFrame:
-    # a query may correspond to 2 passages, but the relevancy is always 1
+    # a query may correspond to 2 passages, but the relevancy is always 1 or 0
     size = len(queries_df)
     ndcg = np.zeros((len(at), size))
     precisions = np.zeros((len(at), size))
@@ -77,6 +77,7 @@ def eval_scores(scores, df, queries_df, log=np.log2, at: list[int] = [3, 10, 100
 
         # true relevant
         relevant_pid = df[(df['qid'] == qid) & (df.relevancy == 1)].pid.values
+        # e.g., [2, 33]
         relevant_idx = query_df[query_df.pid.isin(relevant_pid)].index.values + 1
 
         precisions[:, i], ndcg[:, i] = eval_per_query(relevant_idx, at=at, log=log)
