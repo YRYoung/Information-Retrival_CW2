@@ -9,7 +9,7 @@ from XGBoost gradient boosting library to learn a model that can re-rank passage
 command XGBoost to use LambdaMART algorithm for ranking
 by setting the appropriate value to the objective parameter as described in the documentation
 
-carry out hyper-parameter tuning in this task
+carry out hyperparameter tuning in this task
 --------------------------------------------------
 Report:
     - describe the methodology used in deriving the best performing model.
@@ -20,40 +20,65 @@ Report:
 
 """
 
+from huepy import *
+import numpy as np
+import pandas as pd
+import torch
 import xgboost as xgb
+from icecream import ic
+from sklearn.model_selection import train_test_split
+from xgboost import Booster
 
-### Splitting training set ###
-# x_train, x_valid, y_train, y_valid = train_test_split(train, target,
-#                                                       random_state=42,
-#                                                           test_size=0.3)
+from eval import eval_per_query, init_evaluator
 
-def custom_eval(preds, dtrain):
-    labels = dtrain.get_label().astype(np.int)
-    preds = (preds >= 0.3).astype(np.int)
-    return [('f1_score', f1_score(labels, preds))]
+from utils import train_embeddings_folder, val_raw_df, timeit, data_path
 
-### XGBoost compatible data ###
-dtrain = xgb.DMatrix(x_train,y_train)
-dvalid = xgb.DMatrix(x_valid, label = y_valid)
 
-### defining parameters ###
-params = {
-          'colsample': 0.9,
-          'colsample_bytree': 0.5,
-          'eta': 0.1,
-          'max_depth': 8,
-          'min_child_weight': 6,
-          'objective': 'binary:logistic',
-          'subsample': 0.9
-          }
+@timeit
+def load_data(train_pth=f'{train_embeddings_folder}/train_{1}.pth'):
+    data = torch.load(train_pth)
+    x = data[0].detach().numpy()
+    y = data[1].detach().numpy()
 
-### Training the model ###
-xgb_model = xgb.train(
-                      params,
-                      dtrain,
-                      feval= custom_eval,
-                      num_boost_round= 1000,
-                      maximize=True,
-                      evals=[(dvalid, "Validation")],
-                      early_stopping_rounds=30
-                      )
+    # Splitting training set
+    x_train, x_valid, y_train, y_valid = train_test_split(x, y, random_state=0, test_size=0.1)
+
+    x_train = x_train.reshape(-1, 600)
+    x_valid = x_valid.reshape(-1, 600)
+
+    # XGBoost compatible data
+    return xgb.DMatrix(x_train, y_train), xgb.DMatrix(x_valid, label=y_valid)
+
+
+@timeit
+def train_model(dtrain, dvalid):
+    # defining parameters
+    params = {
+        'eta': 0.1,
+        'max_depth': 200,
+        'objective': 'rank:ndcg',
+        'sampling_method': 'gradient_based',
+        #     'subsample': 0.9,
+        'eval_metric': 'ndcg-'
+    }
+
+    # Training the model
+    xgb_model = xgb.train(
+        params,
+        dtrain,
+        num_boost_round=1000,
+        maximize=True,
+        evals=[(dvalid, 'val'), (dtrain, 'train')],
+        early_stopping_rounds=30
+    )
+    return xgb_model
+
+
+if __name__ == '__main__':
+    xgb.config_context(verbosity=1)
+    # dtrain, dvalid = load_data()
+    # model = train_model(dtrain, dvalid)
+
+    model = Booster()
+    model.load_model(f"{data_path}/temp2/xgboost.model")
+    init_evaluator(x_val_handler=lambda x: x.detach().numpy().reshape(-1, 600))(model)
