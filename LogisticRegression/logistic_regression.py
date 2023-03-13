@@ -21,17 +21,19 @@ Analyze the effect of the learning rate on the model training loss.
 """
 import sys
 
+import numpy as np
 import pandas as pd
 import torch
+from huepy import *
 from icecream import ic
 from torch import nn, optim
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from CustomDataset import CustomDataset
-
-data_path = '../data'
+from eval import eval_per_query, init_evaluator
+from utils import data_path, val_raw_df, timeit
 
 output_path = f'{data_path}/temp1'
 val_tsv = f'{data_path}/part2/validation_data.tsv'
@@ -83,16 +85,7 @@ def train_test_batch(model, dataloader, optimizer, criterion, train, writer, tot
 def train_model(dataframe, num_epochs=10, lr=5e-3, batch_size=512, load_from=-1, logdir=None):
     # init dataset and dataloader
     full_dataset = CustomDataset(dataframe)
-
-    train_size = int(0.8 * len(full_dataset))
-    test_size = len(full_dataset) - train_size
-    ic(train_size, test_size)
-    train_dataset, test_dataset = random_split(full_dataset, [train_size, test_size])
-
-    loader_config = {"batch_size": batch_size, "shuffle": True, "num_workers": 4,
-                     }
-    train_loader = DataLoader(train_dataset, **loader_config)
-    test_loader = DataLoader(test_dataset, **loader_config)
+    train_loader = DataLoader(full_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 
     # init the model
     model = LogisticRegression()
@@ -102,7 +95,7 @@ def train_model(dataframe, num_epochs=10, lr=5e-3, batch_size=512, load_from=-1,
     total_batch = [0, 0]
 
     if load_from >= 0:
-        logdir = load_model(model, optimizer, epoch=load_from, total_batch=total_batch)
+        logdir = load_model(model, epoch=load_from, optimizer=optimizer, total_batch=total_batch)
 
     model.to(device)
     writer = SummaryWriter(logdir)
@@ -136,33 +129,14 @@ def train_model(dataframe, num_epochs=10, lr=5e-3, batch_size=512, load_from=-1,
     return model.eval()  # return trained model
 
 
-def eval_model(eval_dataframe, name, batch_size=512):
-    # load model
-    epoch = 3
-    model = LogisticRegression()
-
-    checkpoint = torch.load(f'{output_path}/model_{epoch}.pth')
+@timeit
+def load_model(model, epoch: int, run_name: str, optimizer=None, total_batch=None):
+    checkpoint = torch.load(f'{output_path}/{run_name}/model_{epoch}.pth')
     model.load_state_dict(checkpoint['model_state_dict'])
-
-    model.eval()
-
-    # init dataset and dataloader
-    full_dataset = CustomDataset(eval_dataframe, name)
-    loader = DataLoader(full_dataset, batch_size=batch_size, shuffle=False)
-
-    # eval
-    pbar = tqdm(enumerate(loader), unit='batch', total=len(loader), desc=name)
-    for i_batch, (x_batch, y_batch) in pbar:
-        pred = model.forward(x_batch)
-
-        # writer.add_scalar(f'Evaluation/{name}', losses[i_batch], total_batch[int(not train)])
-
-
-def load_model(model, optimizer, epoch, total_batch):
-    checkpoint = torch.load(f'{output_path}/model_{epoch}.pth')
-    model.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    total_batch[:] = checkpoint['total_batch']
+    if optimizer is not None:
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    if total_batch is not None:
+        total_batch[:] = checkpoint['total_batch']
     return checkpoint['logdir']
 
 
@@ -170,6 +144,26 @@ if getattr(sys, 'gettrace', None):
     print('Debugging')
 if __name__ == "__main__":
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     print(f'training in {device}')
-    train_model(pd.read_parquet(train_tsv),
-                logdir='runs/lr_5e_3')
+    # train_model(pd.read_parquet(train_tsv), logdir='runs/lr_5e_3')
+    at = [3, 10, 100]
+    evaluator = init_evaluator(x_val_handler=
+                               lambda x: x.detach().to(device).permute(0, 2, 1),
+                               at=at)
+    # '5e_3', '1e_3',
+    for run_name in ['1e_2']:
+        for epoch in range(7):
+            model = LogisticRegression()
+            logdir = load_model(model, epoch, run_name)
+            model.to(device).eval()
+
+
+            def predict_callback(x_val):
+                return model.forward(x_val).cpu().detach().numpy()
+
+
+            avg_precision, avg_ndcg = evaluator(predict_callback)
+            writer = SummaryWriter(logdir)
+            [writer.add_scalar(f'Epoch/mAP@{now}', value, epoch) for now, value in zip(at, avg_precision)]
+            [writer.add_scalar(f'Epoch/NDCG@{now}', value, epoch) for now, value in zip(at, avg_ndcg)]
