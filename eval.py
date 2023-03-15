@@ -22,7 +22,7 @@ from cw1.task2 import *
 from cw1.task3 import *
 from utils import data_path, timeit, val_raw_df
 
-output_path = f'{data_path}/temp0'
+output_path = f'{data_path}/temp_bm25'
 
 __all__ = ['read_csv', 'eval_per_query', 'init_evaluator']
 
@@ -34,6 +34,7 @@ def init_evaluator(at: list = [3, 10, 100], x_val_handler=None):
     del val_df['passage']
     del val_df['qid']
     del val_df['pid']
+    del val_df['p_idx']
     x_val = torch.load('./data/val_embeddings.pth')[0]
 
     if x_val_handler is not None:
@@ -53,7 +54,7 @@ def init_evaluator(at: list = [3, 10, 100], x_val_handler=None):
         df = val_df.sort_values(by=['q_idx', 'predict_relevancy'], ascending=[True, False])
         del val_df['predict_relevancy']
 
-        df['p_idx'] = p_idx
+        df.loc[:, 'p_idx'] = p_idx
         retrieved_relevant = df[df['relevancy'] == 1][['q_idx', 'p_idx']]
 
         _, idx, counts = np.unique(retrieved_relevant['q_idx'], return_counts=True, return_index=True)
@@ -73,6 +74,15 @@ def init_evaluator(at: list = [3, 10, 100], x_val_handler=None):
         return avg_precision, avg_ndcg
 
     return lambda a: eval_one(a)
+
+
+# def test_eval_per_query():
+#     a, b = eval_per_query(np.array([1, 2]), at=[2])
+#     assert a == b == 1
+#     a, b = eval_per_query(np.array([2]), at=[1, 2])
+#     assert a[0] == b[0] == 0
+#     assert a[1] == 0.5
+#     assert np.allclose(b[1], 1 / np.log2(1 + 2))
 
 
 def eval_per_query(relev_rank, at: list[int], log=np.log):
@@ -195,14 +205,23 @@ def _get_bm25_var(p_idx, q_idx, p_df, q_df, df, load=False, first_n=100):
 
 
 if __name__ == '__main__':
-    tokens = _get_tokens(load=False, vocab_txt=f'{data_path}/part2/train_data.tsv')
-    all_df, passages_df, queries_df = _to_dataframes(csv_path=f'{data_path}/part2/train_data.tsv')
-    passages_indexes, queries_indexes = _get_indexes(tokens, passages_df, queries_df, load=False,
-                                                     file_path=(f'{output_path}/train_passages_idx.pkl',
-                                                                f'{output_path}/train_queries_idx.pkl'))
+    tokens = _get_tokens(load=True, vocab_txt=f'{data_path}/part2/validation_data.tsv')
+    all_df, passages_df, queries_df = _to_dataframes(csv_path=f'{data_path}/part2/validation_data.tsv')
+    passages_indexes, queries_indexes = _get_indexes(tokens, passages_df, queries_df, load=True,
+                                                     file_path=(f'{output_path}/var_passages_idx.pkl',
+                                                                f'{output_path}/var_queries_idx.pkl'))
     bm25_scores = _get_bm25_var(passages_indexes, queries_indexes,
                                 passages_df, queries_df, all_df,
-                                load=False, first_n=100)
+                                load=True, first_n=100)
 
     eval_df = _eval_scores(bm25_scores, all_df, queries_df)
-    eval_df.to_csv(f'{output_path}/eval_bm25_train.csv', header=True, index=False)
+    # eval_df.to_csv(f'{output_path}/eval_bm25_train.csv', header=True, index=False)
+    """
+    Average Precision @ 3: 0.19613821138211382
+    Average Precision @ 10: 0.23121405066091477
+    Average Precision @ 100: 0.24240865131709521
+    ----------------------------------------
+    Average NDCG @ 3: 0.22273844743332902
+    Average NDCG @ 10: 0.29547669631374407
+    Average NDCG @ 100: 0.3606156318532261
+    """
