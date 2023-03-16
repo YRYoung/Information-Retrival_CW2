@@ -92,14 +92,14 @@ def eval_per_query(relev_rank, at: list[int], log=np.log):
 
     for j, now in enumerate(at):
         relev_rank_now = relev_rank[relev_rank <= now]
-        num__relev = len(relev_rank_now)
-        if num__relev == 0:
+        num_relev = len(relev_rank_now)
+        if num_relev == 0:
             continue
 
-        precision = (np.arange(num__relev) + 1) / relev_rank_now
-        precisions[j] = np.sum(precision) / num__relev
+        precision = (np.arange(num_relev) + 1) / relev_rank_now
+        precisions[j] = np.sum(precision) / num_relev
 
-        ideal_dgc = np.sum(1 / log(2 + np.arange(num__relev)))
+        ideal_dgc = np.sum(1 / log(2 + np.arange(len(relev_rank))))
         ndcg[j] = np.sum(dcg[:now]) / ideal_dgc
 
     return precisions, ndcg
