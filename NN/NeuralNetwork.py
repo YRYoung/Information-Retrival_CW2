@@ -1,22 +1,20 @@
 """
-Logistic Regression (LR)(25 marks)
----------------------------------------
-Represent passages and query based on a word embedding method,
-(such as Word2Vec, GloVe, FastText, or ELMo).
+Neural Network Model (NN) (30 marks)
 
-Compute query (/passage) embeddings by averaging embeddings of all the words in that query (/passage).
+Using the same training data representation from the previous question
+build a neural network based model that can re-rank passages.
 
-With these query and passage embeddings as input, implement a logistic regression model
-to assess relevance of a passage to a given query.
----------------------------------------
-Describe how you perform input processing & representation or features used.
+You may use existing packages, namely Tensorflow or PyTorch in this subtask
+Justify your choice by describing why you chose a particular architecture and how it fits to our problem.
+You are allowed to use different types of neural network architectures
+(e.g. feed forward, convolutional, recurrent and/or transformer based neural networks)
 
-Using the metrics you have implemented in the previous part,
-report the performance of your model based on the validation data.
+Using the metrics you have implemented in the first part,
+report the performance of your model on the validation data.
 
-Analyze the effect of the learning rate on the model training loss.
-
-(All implementations for logistic regression algorithm must be your own for this part.)
+Describe how you perform input processing, as well as the representation/features used.
+Your marks for this part will depend on the appropriateness of the model you have chosen for the task,
+as well as the representations/features used in training.
 
 """
 import sys
@@ -41,9 +39,9 @@ train_tsv = f'{output_path}/train_data_del9.parquet.gzip'
 sample_tsv = f'{data_path}/part2/sample_data.tsv'
 
 
-class LogisticRegression(nn.Module):
+class CustomNetwork(nn.Module):
     def __init__(self, input_dim=300):
-        super(LogisticRegression, self).__init__()
+        super(CustomNetwork, self).__init__()
         self.linear0 = nn.Linear(300, 1)
         self.linear1 = nn.Linear(2, 1)
 
@@ -88,7 +86,7 @@ def train_model(dataframe, num_epochs=10, lr=5e-3, batch_size=512, load_from=-1,
     train_loader = DataLoader(full_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 
     # init the model
-    model = LogisticRegression()
+    model = CustomNetwork()
     optimizer = optim.SGD(model.parameters(), lr=lr)
 
     # init tensorboard writer
@@ -113,11 +111,7 @@ def train_model(dataframe, num_epochs=10, lr=5e-3, batch_size=512, load_from=-1,
         print('\ntrain loss = {}'.format(avg_train_loss))
 
         if (epoch + 1) % 1 == 0:
-            test_losses = train_test_batch(model, test_loader, optimizer, criterion=criterion,
-                                           train=False, writer=writer, total_batch=total_batch)
-            avg_test_loss = test_losses.mean()
-            writer.add_scalar('Epoch/Loss/val', avg_test_loss, epoch)
-            print('\nval loss = {}'.format(avg_test_loss))
+
             torch.cuda.empty_cache()
         torch.save({
             'epoch': epoch,
@@ -154,7 +148,7 @@ if __name__ == "__main__":
     # '5e_3', '1e_3',
     for run_name in ['1e_2']:
         for epoch in range(7):
-            model = LogisticRegression()
+            model = CustomNetwork()
             logdir = load_model(model, epoch, run_name)
             model.to(device).eval()
 
