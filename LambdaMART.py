@@ -19,66 +19,59 @@ Report:
         2. the representation/features used as input
 
 """
-
-from huepy import *
-import numpy as np
 import pandas as pd
 import torch
 import xgboost as xgb
-from icecream import ic
-from sklearn.model_selection import train_test_split
+from sklearn import model_selection
 from xgboost import Booster
 
-from eval import eval_per_query, init_evaluator
-
-from utils import train_embeddings_folder, val_raw_df, timeit, data_path
-
-
-@timeit
-def load_data(train_pth=f'{train_embeddings_folder}/train_{1}.pth'):
-    data = torch.load(train_pth)
-    x = data[0].detach().numpy()
-    y = data[1].detach().numpy()
-
-    # Splitting training set
-    x_train, x_valid, y_train, y_valid = train_test_split(x, y, random_state=0, test_size=0.1)
-
-    x_train = x_train.reshape(-1, 600)
-    x_valid = x_valid.reshape(-1, 600)
-
-    # XGBoost compatible data
-    return xgb.DMatrix(x_train, y_train), xgb.DMatrix(x_valid, label=y_valid)
-
-
-@timeit
-def train_model(dtrain, dvalid):
-    # defining parameters
-    params = {
-        'eta': 0.1,
-        'max_depth': 200,
-        'objective': 'rank:ndcg',
-        'sampling_method': 'gradient_based',
-        #     'subsample': 0.9,
-        'eval_metric': 'ndcg-'
-    }
-
-    # Training the model
-    xgb_model = xgb.train(
-        params,
-        dtrain,
-        num_boost_round=1000,
-        maximize=True,
-        evals=[(dvalid, 'val'), (dtrain, 'train')],
-        early_stopping_rounds=30
-    )
-    return xgb_model
+from LR import DataLoader
+from eval import init_evaluator
+from utils import timeit, data_path, queries_embeddings, train_raw_df, load_passages_tensors, train_debug_df, val_raw_df
 
 
 if __name__ == '__main__':
-    xgb.config_context(verbosity=1)
-    # dtrain, dvalid = load_data()
-    # model = train_model(dtrain, dvalid)
+    fixed_params = {
+        # Number of gradient boosted trees. Equivalent to number of boosting rounds.
 
-    model = Booster()
-    model.load_model(f"{data_path}/temp2/xgboost.model")
+        'objective': 'rank:ndcg',
+        'sampling_method': 'gradient_based',  # Used only by gpu_hist tree method.
+        'eval_metric': 'ndcg-',
+        'tree_method': 'gpu_hist',
+
+    }
+
+    param_dicts = {
+
+        'max_depth': [7, 8, 9],
+        'learning_rate ': [0.01, 0.05],
+        'n_estimators': [5, 6, 7, 8, 9],
+        'booster': ['gbtree', 'dart'],
+        'gamma': [0, 1, 2, 3]
+
+    }.update(fixed_params)
+
+    x_df = pd.read_parquet(train_debug_df)
+    dataloader = DataLoader(x_df, len(x_df), load_passages_tensors())
+    _,(train_x, train_y )= [(x, y) for x, y in enumerate(dataloader)][0]
+    del dataloader
+    val_df = pd.read_parquet(val_raw_df)
+    del val_df['query']
+    del val_df['passage']
+    del val_df['pid']
+    del val_df['p_idx']
+    x_val = torch.load('./data/val_embeddings.pth')[0]
+
+    model = xgb.XGBRanker(fixed_params)
+    clf = model_selection.GridSearchCV(model, param_dicts, verbose=1,
+                                       n_jobs=2)
+
+    clf.fit(X=train_x, y=train_y, qid=dataloader.df.qid,
+            eval_set=(x_val, val_df['relevancy']),
+            eval_qid=val_df.qid)
+    print(clf.best_score_)
+    print(clf.best_params_)
+
+    # model = Booster()
+    # model.load_model(f"{data_path}/temp2/xgboost.model")
     init_evaluator(x_val_handler=lambda x: x.detach().numpy().reshape(-1, 600))(model)
