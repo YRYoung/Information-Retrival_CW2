@@ -25,7 +25,7 @@ import xgboost as xgb
 from sklearn import model_selection
 from xgboost import Booster
 
-from LR import DataLoader
+from LogisticRegression import DataLoader
 from eval import init_evaluator
 from utils import timeit, data_path, queries_embeddings, train_raw_df, load_passages_tensors, train_debug_df, val_raw_df
 
