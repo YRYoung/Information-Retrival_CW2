@@ -1,0 +1,36 @@
+CNN:
+  activation: leaky_relu
+  batchNorm:
+  - 1
+  - 1
+  - 1
+  denseUnit: 128
+  kernels:
+  - 3
+  - 3
+  - 3
+  layers:
+  - 32
+  - 64
+  - 96
+  maxPool:
+  - 1
+  - 1
+  - 0
+  stride:
+  - 1
+  - 1
+  - 1
+general:
+  checkpoint_dir: ./checkpoints/
+  displayNet: false
+  seed: 0
+  training_dataframe: ./data/dataframes/train_debug.parquet.gzip
+training:
+  cv: 1
+  decay: -4
+  dropRate: 0.3
+  extraInput: false
+  loadCheckpoint: -1
+  lossFn: mse
+  train: 1
