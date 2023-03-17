@@ -17,147 +17,153 @@ Your marks for this part will depend on the appropriateness of the model you hav
 as well as the representations/features used in training.
 
 """
-import sys
+
+import os
 
 import numpy as np
-import pandas as pd
-import torch
-from huepy import *
-from icecream import ic
-from torch import nn, optim
-from torch.utils.data import DataLoader
-from torch.utils.tensorboard import SummaryWriter
-from tqdm import tqdm
-
-from CustomDataset import CustomDataset
-from eval import eval_per_query, init_evaluator
-from utils import data_path, val_raw_df, timeit
-
-output_path = f'{data_path}/temp1'
-val_tsv = f'{data_path}/part2/validation_data.tsv'
-train_tsv = f'{output_path}/train_data_del9.parquet.gzip'
-sample_tsv = f'{data_path}/part2/sample_data.tsv'
+import tensorflow as tf
+from keras.callbacks import ModelCheckpoint, TensorBoard
+from keras.layers import Dense, Dropout, Flatten, Activation, BatchNormalization, Conv1D, MaxPooling1D, Input, \
+    LeakyReLU
+from keras.metrics import Metric
+from keras.models import load_model, Model
+from keras.optimizers import Adam
+from keras.utils import plot_model
 
 
-class CustomNetwork(nn.Module):
-    def __init__(self, input_dim=300):
-        super(CustomNetwork, self).__init__()
-        self.linear0 = nn.Linear(300, 1)
-        self.linear1 = nn.Linear(2, 1)
+class NDCG(Metric):
+    def __init__(self, evaluator, name="ndcg", **kwargs):
+        super(NDCG, self).__init__(name=name, **kwargs)
+        self.evaluator = evaluator
+        self.ndcg = np.zeros(3)
+        self.mAP = np.zeros(3)
 
-    def forward(self, x):
-        out = self.linear0(x).squeeze()
-        out = self.linear1(out).squeeze()
-        return torch.sigmoid(out)
+    def update_state(self, y_true, y_pred, sample_weight=None):
+        self.mAP, self.ndcg = self.evaluator(y_pred)
 
+    def result(self):
+        return {'mAP@3': self.mAP[0], 'mAP@10': self.mAP[1], 'mAP@100': self.mAP[2],
+                'NDCG@3': self.ndcg[0], 'NDCG@10': self.ndcg[1], 'NDCG@100': self.ndcg[2]}
 
-def train_test_batch(model, dataloader, optimizer, criterion, train, writer, total_batch):
-    name = 'train' if train else 'eval'
-    losses = torch.zeros(len(dataloader)).to(device)
-    model.train(train)
-    pbar = tqdm(enumerate(dataloader),
-                unit='batch', total=len(dataloader), desc=name)
-    for i_batch, (x_batch, y_batch) in pbar:
-        torch.cuda.empty_cache()
-        y_batch = y_batch.to(device)
-        x_batch.to(device)
-
-        if train:
-            optimizer.zero_grad()
-
-        pred = model.forward(x_batch)
-        loss = criterion(pred, y_batch)
-        losses[i_batch] = loss.detach()
-
-        if train:
-            loss.backward()
-            optimizer.step()
-
-        writer.add_scalar(f'Batch/Loss/{name}', losses[i_batch], total_batch[int(not train)])
-        # pbar.set_postfix({'loss': loss.detach()})
-        total_batch[int(not train)] += 1
-
-    return losses
+    def reset_state(self):
+        # The state of the metric will be reset at the start of each epoch.
+        pass
 
 
-def train_model(dataframe, num_epochs=10, lr=5e-3, batch_size=512, load_from=-1, logdir=None):
-    # init dataset and dataloader
-    full_dataset = CustomDataset(dataframe)
-    train_loader = DataLoader(full_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+class Network:
+    def __init__(self, config, evaluator):
 
-    # init the model
-    model = CustomNetwork()
-    optimizer = optim.SGD(model.parameters(), lr=lr)
+        self.config = config
+        self.model = None
+        self.loadCheckpoint = self.config['training']['loadCheckpoint']
+        self.evaluator = evaluator
 
-    # init tensorboard writer
-    total_batch = [0, 0]
+    def _built_model(self):
+        # input image dimensions
+        param_length = 1  # output param length
+        input_shape = (300, 2)
 
-    if load_from >= 0:
-        logdir = load_model(model, epoch=load_from, optimizer=optimizer, total_batch=total_batch)
+        # Start Neural Network
+        sequence = Input(shape=input_shape)
 
-    model.to(device)
-    writer = SummaryWriter(logdir)
+        x = sequence
+        # CNN layer.
+        for i in range(len(self.config['CNN']['layers'])):
 
-    criterion = nn.BCELoss()
-    for epoch in range(load_from + 1, num_epochs):
-        print(f'epoch {epoch}:')
-        train_losses = train_test_batch(model, train_loader, optimizer, criterion=criterion,
-                                        train=True, writer=writer, total_batch=total_batch)
+            x = Conv1D(filters=self.config['CNN']['layers'][i],
+                       kernel_size=self.config['CNN']['kernels'][i],
+                       strides=self.config['CNN']['stride'][i],
+                       padding='same')(x)
+            if self.config['CNN']['batchNorm'][i] == 1:
+                x = BatchNormalization(axis=-1)(x)
+            if self.config['CNN']['activation'] == 'leaky_relu':
+                x = LeakyReLU(0.2)(x)
+            else:
+                x = Activation(self.config['CNN']['activation'])(x)
 
-        avg_train_loss = train_losses.mean()
-        torch.cuda.empty_cache()
+            if self.config['CNN']['maxPool'][i] == 1:
+                x = MaxPooling1D(pool_size=2)(x)
 
-        writer.add_scalar(f'Epoch/Loss/train', avg_train_loss, epoch)
-        print('\ntrain loss = {}'.format(avg_train_loss))
+        flatten_x = Flatten()(x)
 
-        if (epoch + 1) % 1 == 0:
+        dense_layer = Dense(self.config['CNN']['denseUnit'], activation='linear')(flatten_x)
+        dense_layer = LeakyReLU(0.2)(dense_layer)
+        dense_layer = Dropout(self.config['training']['dropRate'])(dense_layer)
+        decision_layer = Dense(param_length, activation='linear')(dense_layer)
+        return sequence, decision_layer
 
-            torch.cuda.empty_cache()
-        torch.save({
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'total_batch': total_batch,
-            'logdir': writer.log_dir,
-        }, f'{output_path}/model_{epoch}.pth')
-    return model.eval()  # return trained model
+    def compile_model(self, checkpoint_dir=None, cv=0, ):
+        sequence, decision_layer = self._built_model()
 
+        if self.loadCheckpoint > 0:
+            # checkpoint_dir = self.config['general']['checkpoint_dir']
+            # cv = self.config['training']['cv']
+            self.model = self.load_model(checkpoint_dir + f'ckt/checkpt_{cv}_{self.loadCheckpoint:03d}.h5')
+        else:
+            self.model = Model(inputs=sequence, outputs=decision_layer)
+            self.model.compile(loss=self.config['training']['lossFn'],
+                               optimizer=Adam(learning_rate=0.001,
+                                              decay=10 ** self.config['training']['decay']),
+                               metrics=[NDCG(evaluator=self.evaluator)]
+                               )
+        self.model.summary()
+        return self.model
 
-@timeit
-def load_model(model, epoch: int, run_name: str, optimizer=None, total_batch=None):
-    checkpoint = torch.load(f'{output_path}/{run_name}/model_{epoch}.pth')
-    model.load_state_dict(checkpoint['model_state_dict'])
-    if optimizer is not None:
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    if total_batch is not None:
-        total_batch[:] = checkpoint['total_batch']
-    return checkpoint['logdir']
+    def train_model(self, X_train, y_train, X_val, y_val, epochs=30, batch_size=64, checkpoint_dir='./',
+                    cv_order=0):
+        print('training begins')
+        # make sure no prior graph exists
+        tf.keras.backend.clear_session()
 
+        # create log folder and checkpoint folder
+        os.makedirs(os.path.join(checkpoint_dir, 'history'), exist_ok=True)
+        os.makedirs(os.path.join(checkpoint_dir, 'ckt'), exist_ok=True)
 
-if getattr(sys, 'gettrace', None):
-    print('Debugging')
-if __name__ == "__main__":
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        # callback
+        # initialise model checkpoint
+        filename = f'ckt/checkpt_{cv_order}' + '_{epoch:03d}.h5'
+        model_cktpt = ModelCheckpoint(os.path.join(checkpoint_dir, filename),
+                                      monitor='val_loss',
+                                      mode='min',
+                                      verbose=0,
+                                      save_freq=1)
+        tbCallBack = TensorBoard(log_dir=f'./runs/{cv_order}',
+                                 write_graph=True,
+                                 write_images=True,
+                                 update_freq='epoch',
+                                 profile_batch=32,
+                                 embeddings_freq=10)
+        callbacks = [model_cktpt, tbCallBack]
+        self.compile_model(checkpoint_dir, cv=cv_order)
 
-    print(f'training in {device}')
-    # train_model(pd.read_parquet(train_tsv), logdir='runs/lr_5e_3')
-    at = [3, 10, 100]
-    evaluator = init_evaluator(x_val_handler=
-                               lambda x: x.detach().to(device).permute(0, 2, 1),
-                               at=at)
-    # '5e_3', '1e_3',
-    for run_name in ['1e_2']:
-        for epoch in range(7):
-            model = CustomNetwork()
-            logdir = load_model(model, epoch, run_name)
-            model.to(device).eval()
+        # display network
+        if self.config['general']['displayNet']:
+            plot_model(self.model, to_file=os.path.join(
+                checkpoint_dir, 'model.png'), show_shapes=True)
 
+        # ensure they have the right shape
 
-            def predict_callback(x_val):
-                return model.forward(x_val).cpu().detach().numpy()
+        X_train = X_train.reshape(-1, 300, 2)
+        y_train = y_train.reshape(-1)
 
+        # trainings
+        self.model.fit(X_train, y_train,
+                       batch_size=batch_size,
+                       epochs=epochs,
+                       initial_epoch=self.loadCheckpoint if self.loadCheckpoint > 0 else 0,
+                       shuffle=True,
 
-            avg_precision, avg_ndcg = evaluator(predict_callback)
-            writer = SummaryWriter(logdir)
-            [writer.add_scalar(f'Epoch/mAP@{now}', value, epoch) for now, value in zip(at, avg_precision)]
-            [writer.add_scalar(f'Epoch/NDCG@{now}', value, epoch) for now, value in zip(at, avg_ndcg)]
+                       validation_data=(X_val, y_val),
+                       validation_steps=1,
+
+                       verbose=1,
+                       workers=4,
+                       use_multiprocessing=True,
+
+                       callbacks=callbacks,
+                       )
+
+    def load_model(self, checkpoint_dir_path):
+        print(f'loading model from {checkpoint_dir_path}')
+        self.model = load_model(checkpoint_dir_path)
+        return self.model
