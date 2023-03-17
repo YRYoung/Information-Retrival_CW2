@@ -19,6 +19,7 @@ Analyze the effect of the learning rate on the model training loss.
 (All implementations for logistic regression algorithm must be your own for this part.)
 
 """
+import os
 
 import numpy as np
 import pandas as pd
@@ -26,8 +27,7 @@ import torch
 from icecream import ic
 from tqdm import tqdm
 
-from eval import init_evaluator
-from utils import queries_embeddings, train_raw_df, load_passages_tensors, map_location
+from utils import queries_embeddings, train_debug_df, passages_embeddings, map_location
 
 
 def sigmoid(x):
@@ -42,19 +42,26 @@ class LogisticRegression():
     def __init__(self, learning_rate, n_iterations):
         self.learning_rate = learning_rate
         self.n_iterations = n_iterations
+        self.accuracies = []
+        self.continue_training = False
+        self.losses = np.array([])
+        self.w = None
+        self.b = None
 
-    def _init_weights(self, w=None, b=None):
-        self.w = w if w is not None else np.zeros(600)
-        self.b = b if b is not None else 0
-        self.losses = np.zeros(self.n_iterations)
+    def _init_weights(self):
+        if self.w is None and self.b is None:
+            self.w = np.zeros(600)
+            self.b = 0
+
+        self.losses = np.concatenate([self.losses, np.zeros(self.n_iterations)])
 
     def fit(self, dataloader, evaluator=None):
+        start_epoch = len(self.losses)
+
         self._init_weights()
-        if evaluator is not None:
-            self.accuracies = []
 
         # gradient descent
-        for epoch in range(self.n_iterations):
+        for epoch in range(start_epoch, start_epoch + self.n_iterations):
             ic(epoch)
 
             pbar = tqdm(enumerate(dataloader), unit='batch', total=len(dataloader))
@@ -62,10 +69,13 @@ class LogisticRegression():
                 loss = self._fit_batch(x_batch, y_batch)
 
                 pbar.set_postfix({'loss': loss})
-                self.losses[epoch] += loss
-            self.losses /= i_batch + 1
+            self.losses[epoch] = loss
+
             if evaluator is not None:
                 self.accuracies.append(evaluator(self.forward))
+
+        self.get_history()
+        print("done")
 
     def _fit_batch(self, x, y):
         #         weights=np.int(y==1)
@@ -87,14 +97,25 @@ class LogisticRegression():
         return res
 
     def save(self, path):
-        return torch.save({'w': self.w, "b": self.b,
+        return torch.save({'w': self.w, "b": self.b, 'history': self.history,
                            'losses': self.losses, 'accuracies': self.accuracies}, path)
 
     def load(self, path):
         value = torch.load(path)
-        self._init_weights(w=value['w'], b=value['b'])
+        self.w = value['w']
+        self.b = value['b']
         self.losses = value['losses']
+        self.losses = self.losses[self.losses != 0]
         self.accuracies = value['accuracies']
+        self.history = value['history']
+        self.continue_training = True
+
+    def get_history(self):
+        result_df = pd.DataFrame(self.losses, columns=['Loss'])
+        result_df.loc[:, ['mAP@3', 'mAP@10', 'mAP@100']] = [a[0] for a in self.accuracies]
+        result_df.loc[:, ['NDCG@3', 'NDCG@10', 'NDCG@100']] = [a[1] for a in self.accuracies]
+        self.history = result_df.iloc[:, [1, 2, 3, 4, 5, 6, 0]]
+        return self.history
 
 
 class DataLoader:
@@ -102,7 +123,7 @@ class DataLoader:
         self.current_pth = -1
         self.p_tensors = p_tensors
         self.q_tensors = torch.load(queries_embeddings, map_location=map_location)
-        self.df = dataframe.sort_values(by=['pid'])[['qid', 'pid', 'relevancy']]
+        self.df = dataframe.sort_values(by=['qid'])[['qid', 'pid', 'relevancy']]
         self.N = len(dataframe)
         self.batch_size = batch_size
         self.num_batches = self.N // self.batch_size + 1
@@ -130,13 +151,27 @@ class DataLoader:
 
 
 if __name__ == '__main__':
-    epoch = 50
-    learning_rate = 0.005
-    dataloader = DataLoader(pd.read_parquet(train_raw_df), 1024, load_passages_tensors())
-    model = LogisticRegression(learning_rate=learning_rate, n_iterations=epoch)
-    # model.load('./lrmodel.pth')
-    evaluator = init_evaluator(
-        x_val_handler=lambda x: x.numpy().reshape(-1, 600))
-    model.save(f'./all_{epoch}_{str(learning_rate)}.pth')
 
-    model.fit(dataloader, evaluator)
+    pth_files = os.listdir(passages_embeddings)
+    pth_files.sort(key=lambda x: int(x[:-4]))
+    p_tensors_all = {}
+    [p_tensors_all.update(torch.load(
+        f'{passages_embeddings}/{name}',
+        map_location=torch.device('cpu'))) for name in tqdm(pth_files)]
+
+    import eval
+
+    evaluator = eval.init_evaluator(
+        x_val_handler=lambda x: x.numpy().reshape(-1, 600))
+    dataloader = DataLoader(pd.read_parquet(train_debug_df), 1024, p_tensors_all)
+
+    for lr in [0.02, 0.005, 0.1]:
+        model = LogisticRegression(learning_rate=lr, n_iterations=400)
+
+        model.fit(dataloader, evaluator)
+
+        name = f'./debug_400_{lr:.3f}'
+        model.save(f'{name}.pth')
+
+        dff = model.get_history()
+        dff.to_parquet(f'{name}.dataframe')
