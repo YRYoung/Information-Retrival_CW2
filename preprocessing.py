@@ -21,7 +21,6 @@ train_raw_df = f'{df_path}/train_data_raw.parquet.gzip'
 val_raw_df = f'{df_path}/val_data_raw.parquet.gzip'
 
 
-
 def add_q_idx(dataframe,
               save=train_raw_df):
     df1 = dataframe.sort_values(by=['qid', 'relevancy'], ascending=[True, False])
@@ -93,7 +92,7 @@ def embed_queries(raw_df: pd.DataFrame, embedding, save_path=f'{data_path}/p_emb
     del raw_df
     pbar = tqdm(sub_df.itertuples(), total=len(sub_df), unit=content)
 
-    data={}
+    data = {}
     previous_pid = 1
     for row in pbar:
         pid = row[1]
@@ -110,6 +109,11 @@ def embed_queries(raw_df: pd.DataFrame, embedding, save_path=f'{data_path}/p_emb
             pbar.set_postfix({'file_name': file_name})
 
 
+def read_csv(csv_path) -> pd.DataFrame:
+    df = pd.read_csv(csv_path,
+                     sep='\t', header=0,
+                     names=['qid', 'pid', 'query', 'passage', 'relevancy']).drop_duplicates()
+    return df.reset_index(drop=True)
 
 
 if __name__ == "__main__":
