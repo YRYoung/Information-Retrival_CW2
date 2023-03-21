@@ -20,7 +20,38 @@ import pandas as pd
 import numpy as np
 from utils import val_raw_df
 
-__all__ = [ 'eval_per_query', 'init_evaluator']
+__all__ = ['eval_per_query', 'eval_dataframe', 'init_evaluator']
+
+
+def eval_dataframe(df: pd.DataFrame, pred, at=[3, 10, 100]):
+    assert len(df) == len(pred)
+
+    _, count_repeats = np.unique(df.q_idx.values, return_counts=True)
+    p_idx = np.hstack([np.arange(count) for count in count_repeats])
+    num_queries = len(count_repeats)
+
+    df.loc[:, 'predict_relevancy'] = pred
+    df = df.sort_values(by=['q_idx', 'predict_relevancy'], ascending=[True, False])
+    del df['predict_relevancy']
+
+    df.loc[:, 'p_idx'] = p_idx
+    retrieved_relevant = df[df['relevancy'] == 1][['q_idx', 'p_idx']].copy()
+
+    _, idx, counts = np.unique(retrieved_relevant['q_idx'], return_counts=True, return_index=True)
+
+    precisions = np.zeros((len(at), num_queries))
+    ndcgs = np.zeros((len(at), num_queries))
+
+    for i, (start, l) in enumerate(zip(idx, counts)):
+        rel_idx = retrieved_relevant[start:start + l]['p_idx'].values + 1
+        precision, ndcg = eval_per_query(rel_idx, at)
+        precisions[:, i] = precision
+        ndcgs[:, i] = ndcg
+
+    avg_precision = np.mean(precisions, axis=1)
+    avg_ndcg = np.mean(ndcgs, axis=1)
+
+    return avg_precision, avg_ndcg
 
 
 def init_evaluator(at: list = [3, 10, 100], x_val_handler=None, prepare_x=True):
@@ -50,7 +81,7 @@ def init_evaluator(at: list = [3, 10, 100], x_val_handler=None, prepare_x=True):
         del val_df['predict_relevancy']
 
         df.loc[:, 'p_idx'] = p_idx
-        retrieved_relevant = df[df['relevancy'] == 1][['q_idx', 'p_idx']]
+        retrieved_relevant = df[df['relevancy'] == 1][['q_idx', 'p_idx']].copy()
 
         _, idx, counts = np.unique(retrieved_relevant['q_idx'], return_counts=True, return_index=True)
 
@@ -63,8 +94,8 @@ def init_evaluator(at: list = [3, 10, 100], x_val_handler=None, prepare_x=True):
         avg_precision = np.mean(precisions, axis=1)
         avg_ndcg = np.mean(ndcgs, axis=1)
 
-        [print(blue(italic(f'mAP @ {now}: {value}'))) for now, value in zip(at, avg_precision)]
-        [print(orange(italic(f'NDCG @ {now}: {value}'))) for now, value in zip(at, avg_ndcg)]
+        # [print(blue(italic(f'mAP @ {now}: {value}'))) for now, value in zip(at, avg_precision)]
+        # [print(orange(italic(f'NDCG @ {now}: {value}'))) for now, value in zip(at, avg_ndcg)]
 
         return avg_precision, avg_ndcg
 
@@ -90,5 +121,3 @@ def eval_per_query(relev_rank, at: list[int], log=np.log):
         ndcg[j] = np.sum(dcg[:now]) / ideal_dgc
 
     return precisions, ndcg
-
-
