@@ -19,7 +19,6 @@ Analyze the effect of the learning rate on the model training loss.
 (All implementations for logistic regression algorithm must be your own for this part.)
 
 """
-import os
 
 import numpy as np
 import pandas as pd
@@ -27,7 +26,9 @@ import torch
 from icecream import ic
 from tqdm import tqdm
 
-from utils import queries_embeddings, train_debug_df, passages_embeddings, map_location
+from NN.CustomDataset import CustomDataset
+from utils import queries_embeddings, load_passages_tensors, \
+    train_raw_df
 
 
 def sigmoid(x):
@@ -38,8 +39,9 @@ def BCEloss(y, h):
     return y * np.log(h) + (1 - y) * np.log(1 - h)
 
 
-class LogisticRegression():
+class LogisticRegression:
     def __init__(self, learning_rate, n_iterations):
+
         self.learning_rate = learning_rate
         self.n_iterations = n_iterations
         self.accuracies = []
@@ -47,6 +49,7 @@ class LogisticRegression():
         self.losses = np.array([])
         self.w = None
         self.b = None
+        self.history = None
 
     def _init_weights(self):
         if self.w is None and self.b is None:
@@ -119,59 +122,49 @@ class LogisticRegression():
 
 
 class DataLoader:
-    def __init__(self, dataframe: pd.DataFrame, batch_size, p_tensors):
-        self.current_pth = -1
-        self.p_tensors = p_tensors
-        self.q_tensors = torch.load(queries_embeddings, map_location=map_location)
-        self.df = dataframe.sort_values(by=['qid'])[['qid', 'pid', 'relevancy']]
-        self.N = len(dataframe)
+    def __init__(self, batch_size: int, passages_per_query: int, p_tensors=None, dataframe=None, q_tensors=None, ):
+
+        if p_tensors is None:
+            p_tensors = load_passages_tensors()
+
+        if q_tensors is None:
+            q_tensors = torch.load(queries_embeddings, map_location=torch.device('cpu'))
+
+        if dataframe is None:
+            dataframe = pd.read_parquet(train_raw_df)
+
+        self.dataset = ValidationDataset(all_dataframe=dataframe,
+                                         val_p_tensors=p_tensors,
+                                         queries_tensors=q_tensors,
+                                         passages_per_query=passages_per_query)
+
+        _, counts = np.unique(dataframe.qid.values, return_counts=True)
+        self.valid_q_i = np.where(counts > passages_per_query)[0]
+        ic(self.valid_q_i)
+        self.passages_per_query = passages_per_query
+        self.num_queries = len(self.valid_q_i)
+
         self.batch_size = batch_size
-        self.num_batches = self.N // self.batch_size + 1
-        ic(self.N, self.num_batches, self.batch_size)
+        self.num_batches = self.num_queries // self.batch_size + 1
+
+        ic('DataLoader', self.num_queries, self.num_batches, self.batch_size)
 
     def __len__(self):
         return self.num_batches
 
     def __iter__(self):
-        for start in range(0, self.N, self.batch_size):
-            end = min(start + self.batch_size, self.N)
+        for start in range(0, self.num_queries, self.batch_size):
+            end = min(start + self.batch_size, self.num_queries)
             this_batch_size = end - start
-            df = self.df.iloc[start:end]
-            df.reset_index(drop=True, inplace=True)
 
-            queries = torch.zeros((this_batch_size, 300))
-            passages = torch.zeros((this_batch_size, 300))
-            for i, row in df.iterrows():
-                queries[i, :] = self.q_tensors[row.qid]
-                passages[i, :] = self.p_tensors[row.pid]
+            x = np.zeros((this_batch_size * self.passages_per_query, 2, 300))
+            y = np.zeros(this_batch_size * self.passages_per_query)
+            for indice, q_idx in enumerate(self.valid_q_i[start:end]):
+                xx, yy = self.dataset[q_idx]
+                idx_start = indice * self.passages_per_query
+                idx_end = idx_start + self.passages_per_query
 
-            x = torch.stack([queries, passages], dim=2).numpy().reshape(-1, 600)
-            y = df.relevancy.values.reshape(-1)
-            yield x, y
+                x[idx_start:idx_end, ...] = xx
+                y[idx_start:idx_end] = yy
 
-
-if __name__ == '__main__':
-
-    pth_files = os.listdir(passages_embeddings)
-    pth_files.sort(key=lambda x: int(x[:-4]))
-    p_tensors_all = {}
-    [p_tensors_all.update(torch.load(
-        f'{passages_embeddings}/{name}',
-        map_location=torch.device('cpu'))) for name in tqdm(pth_files)]
-
-    import eval
-
-    evaluator = eval.init_evaluator(
-        x_val_handler=lambda x: x.numpy().reshape(-1, 600))
-    dataloader = DataLoader(pd.read_parquet(train_debug_df), 1024, p_tensors_all)
-
-    for lr in [0.02, 0.005, 0.1]:
-        model = LogisticRegression(learning_rate=lr, n_iterations=400)
-
-        model.fit(dataloader, evaluator)
-
-        name = f'./debug_400_{lr:.3f}'
-        model.save(f'{name}.pth')
-
-        dff = model.get_history()
-        dff.to_parquet(f'{name}.dataframe')
+            yield x.reshape(-1, 600), y
