@@ -1,16 +1,14 @@
 import os
 import pickle
+import sys
 
-import h5py
-import numpy as np
 import pandas as pd
 import yaml
 
-import NeuralNetwork
+from NN.tf_model import NeuralNetwork
 from LogisticRegression import DataLoader
 from eval import init_evaluator
-
-from utils import data_path, val_raw_df, timeit, train_debug_df, load_passages_tensors
+from utils import data_path, train_debug_df, load_passages_tensors
 
 output_path = f'{data_path}/temp1'
 val_tsv = f'{data_path}/part2/validation_data.tsv'
@@ -24,7 +22,7 @@ batch_size = 64
 def main_train():
     os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
-    with open('config.yaml') as f:
+    with open('./NN/config.yaml') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
 
     # set up variables
@@ -67,4 +65,6 @@ def main_train():
 
 
 if __name__ == '__main__':
+    sys.path.append('./cw2/NN')
+    os.chdir('../..')
     main_train()
