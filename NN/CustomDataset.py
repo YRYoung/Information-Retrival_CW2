@@ -1,38 +1,169 @@
+import numpy as np
 import pandas as pd
 import torch
-from flair.data import Sentence
-from flair.embeddings import WordEmbeddings
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, SubsetRandomSampler
 from icecream import ic
 
 
-def processing(row: pd.Series, embedding: WordEmbeddings):
-    sentences = [Sentence(s) for s in [row['query'], row['passage']]]
-    embedding.embed(sentences)
-    # (2, 300)
-    x = torch.stack([torch.stack(
-        [token.embedding for token in sent.tokens]).mean(dim=0) for sent in sentences])
-
-    y = torch.tensor(row.relevancy, dtype=torch.float32)  # (1) float32
-
-    return x, y
-
-
 class CustomDataset(Dataset):
-    def __init__(self, dataframe):
+
+    def __init__(self, all_dataframe: pd.DataFrame,
+                 passages_tensors: dict[int, torch.Tensor] | None,
+                 queries_tensors: dict[int, torch.Tensor] | None,
+                 return_tensors: str,
+                 passages_per_query=100,
+                 generator=None, fake_tensor=True, shuffle_passages=True):
         super(Dataset).__init__()
+        self.shuffle_passages = shuffle_passages
+        self.fake_tensor = fake_tensor
+        self.return_tensors = return_tensors
 
-        print(f'processing data: ', end='')
+        self.generator = generator
 
-        self.dataframe = dataframe
-        self.N = len(self.dataframe)
-        ic(self.N)
+        self.all_dataframe = all_dataframe  # qid, pid, relevancy
 
-        self.embedding = WordEmbeddings('en')
+        counts = np.unique(all_dataframe.qid.values, return_counts=True)[1]
+        self.valid_q_indexes = np.where(counts > passages_per_query)[0]
+
+        assert passages_per_query >= 5
+        self.passage_per_q = passages_per_query
+        self.p_tensors = passages_tensors
+        self.q_tensors = queries_tensors
 
     def __len__(self):
-        return self.N
+        return len(self.valid_q_indexes)
 
-    def __getitem__(self, idx):
-        # all_df = self.dataframe[self.dataframe['qidx'] == idx]
-        return processing(self.dataframe.iloc[idx], self.embedding)
+    def _set_generator(self):
+
+        if self.generator is None:
+            seed = int(torch.empty((), dtype=torch.int32).random_().item())
+            generator = torch.Generator()
+            generator.manual_seed(seed)
+        else:
+            generator = self.generator
+        return generator
+
+    def __getitem__(self, q_idx: int):
+        q_idx = self.valid_q_indexes[q_idx]
+
+        passage_collection = self.all_dataframe[self.all_dataframe.q_idx == q_idx].copy()
+        passage_collection.reset_index(drop=True, inplace=True)
+        qid = passage_collection.qid.iloc[0]
+
+        num_positives = len(passage_collection[passage_collection.relevancy == 1])
+        assert num_positives > 0
+        num_passages = len(passage_collection)
+        assert num_passages >= self.passage_per_q
+
+        generator = self._set_generator()
+
+        p_index = torch.arange(num_positives).tolist()
+
+        p_index += (torch.randperm(num_passages - num_positives, generator=generator) + num_positives).tolist()[
+                   :self.passage_per_q - num_positives]
+        #         assert len(p_index) == self.passage_per_q, (qid, q_idx, num_passages, num_positives)
+        pids = passage_collection.loc[p_index, 'pid'].values.reshape(-1).tolist()
+        #         assert len(pids) == self.passage_per_q, pids
+
+        if self.return_tensors == 'tuple':
+            if self.fake_tensor:
+                x = (torch.rand(1, 300), torch.rand(self.passage_per_q, 300))
+            else:
+                query = self.q_tensors[qid].reshape(-1, 300)
+                passages = torch.concatenate([self.p_tensors[pid].reshape(-1, 300) for pid in pids])
+                x = (query, passages)
+
+        elif self.return_tensors == 'cat':
+            if self.fake_tensor:
+                x = torch.rand(self.passage_per_q, 2, 300)
+            else:
+                query = self.q_tensors[qid].reshape(-1).repeat(self.passage_per_q, 1)
+                passages = torch.concatenate([self.p_tensors[pid].reshape(-1, 300) for pid in pids])
+                x = torch.stack([query, passages], dim=1)  # (N, 2, 300)
+
+        y = passage_collection.loc[:self.passage_per_q - 1, ['relevancy']].values.reshape(-1)  # (N,)
+
+        if self.shuffle_passages:
+            shuffle_idx = torch.randperm(self.passage_per_q)
+        return [x, torch.from_numpy(y)]
+
+
+class ValidationDataset(Dataset):
+
+    def __init__(self, all_dataframe: pd.DataFrame,
+                 train_p_tensors: dict[int, torch.Tensor],
+                 val_p_tensors: dict[int, torch.Tensor],
+
+                 queries_tensors: dict[int, torch.Tensor],
+                 return_tensors, return_ids=False, fake_tensor=True):
+        super(Dataset).__init__()
+        self.val_p_tensors = val_p_tensors
+        self.fake_tensor = fake_tensor
+        self.return_tensors = return_tensors
+        self.return_ids = return_ids
+
+        self.all_dataframe = all_dataframe  # qid, pid, relevancy
+
+        self.p_tensors = train_p_tensors
+        self.q_tensors = queries_tensors
+
+    def __len__(self):
+        return len(self.self.q_tensors)
+
+    def get_p_tensor(self, idx):
+        try:
+            return self.p_tensors[idx]
+        except KeyError:
+            return self.val_p_tensors[idx]
+
+    def __getitem__(self, q_idx: int):
+
+        passage_collection = self.all_dataframe[self.all_dataframe.q_idx == q_idx].copy()
+        passage_collection.reset_index(drop=True, inplace=True)
+        qid = passage_collection.qid.iloc[0]
+
+        pids = passage_collection.loc[:, 'pid'].values.reshape(-1).tolist()
+
+        result = []
+        if self.return_ids:
+            result += [(qid, pids)]
+        if type(self.return_tensors) is str:
+
+            if self.return_tensors == 'tuple':
+                if self.fake_tensor:
+                    x = (torch.rand(1, 300), torch.rand(len(pids), 300))
+                else:
+                    query = self.q_tensors[qid].reshape(-1, 300)
+                    passages = torch.concatenate([self.p_tensors[pid].reshape(-1, 300) for pid in pids])
+                    x = (query, passages)
+
+            elif self.return_tensors == 'cat':
+                if self.fake_tensor:
+                    x = torch.rand(self.len(pids), 2, 300)
+                else:
+                    query = self.q_tensors[qid].reshape(-1).repeat(len(pids), 1)
+                    passages = torch.concatenate([self.p_tensors[pid].reshape(-1, 300) for pid in pids])
+                    x = torch.stack([query, passages], dim=1)  # (N, 2, 300)
+
+            y = passage_collection.loc[:, ['relevancy']].values.reshape(-1)  # (N,)
+            result += [x, torch.from_numpy(y)]
+
+        return result
+
+
+if __name__ == '__main__':
+    from utils import train_raw_df, queries_embeddings, map_location, load_passages_tensors
+    from torch.utils.data import DataLoader
+
+    df = pd.read_parquet(train_raw_df)
+
+    q_tensors = torch.load(queries_embeddings, map_location=map_location)
+    p_tensors = load_passages_tensors(first=1)
+    dataset = ValidationDataset(df,
+                                val_p_tensors=p_tensors,
+                                queries_tensors=q_tensors,
+                                passages_per_query=7, generator=None)
+    dataloader = DataLoader(dataset, batch_size=10)
+    for i, batch in enumerate(dataloader):
+        print(batch)
+        if i > 5: break
