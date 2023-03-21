@@ -1,24 +1,15 @@
-import random
-
 import numpy as np
 import pandas as pd
 import torch
-from flair.data import Sentence
-from flair.embeddings import WordEmbeddings
-from icecream import ic
 from tqdm import tqdm
 
-from eval import read_csv
+import cw1.task1
+from utils import train_raw_df, val_raw_df
 
 data_path = './data'
 
 output_path = f'{data_path}/temp1'
-val_tsv = f'{data_path}/part2/validation_data.tsv'
-train_tsv = f'{data_path}/part2/train_data.tsv'
-sample_tsv = f'{data_path}/part2/sample_data.tsv'
 df_path = f'{data_path}/dataframes'
-train_raw_df = f'{df_path}/train_data_raw.parquet.gzip'
-val_raw_df = f'{df_path}/val_data_raw.parquet.gzip'
 
 
 def add_q_idx(dataframe,
@@ -61,6 +52,8 @@ def subsample(dataframe: pd.DataFrame, save):
 
 
 def _processing(all_df, embedding):
+    from flair.data import Sentence
+
     avg_embedding = []
 
     for content in ['query', 'passage']:
@@ -85,8 +78,10 @@ def embed_all(dataframe, embedding, save_path):
     torch.save([x, y], save_path)
 
 
-def embed_queries(raw_df: pd.DataFrame, embedding, save_path=f'{data_path}/p_embeddings', passage=True):
-    id, content = ('pid', 'passage') if passage else ('qid,''query')
+def embed_queries(raw_df: pd.DataFrame, embedding, save_path,
+                  passage=True, embedded_pids=None):
+    from flair.data import Sentence
+    id, content = ('pid', 'passage') if passage else ('qid', 'query')
 
     sub_df = raw_df[[id, content]].drop_duplicates()
     del raw_df
@@ -96,17 +91,26 @@ def embed_queries(raw_df: pd.DataFrame, embedding, save_path=f'{data_path}/p_emb
     previous_pid = 1
     for row in pbar:
         pid = row[1]
-        sentence = Sentence(row[2])
+        if embedded_pids is not None and pid in embedded_pids:
+            continue
+        sent_str = row[2]
+        # if tokenize_callback is not None and callable(tokenize_callback):
+        #     sent_str = tokenize_callback(sent_str, return_countter=False)
+
+        sentence = Sentence(sent_str)
 
         embedding.embed(sentence)
         data[pid] = torch.stack([token.embedding for token in sentence.tokens]).mean(dim=0)
 
-        if pid % 100000 == 0:
-            file_name = f'{save_path}/{previous_pid}_{pid}.pth'
+        if passage and pid % 100000 == 0:
+            file_name = f'{save_path}/{previous_pid}.pth'
             torch.save(data, file_name)
             data = {}
             previous_pid = pid
             pbar.set_postfix({'file_name': file_name})
+
+    final_filename = f'{save_path}/{previous_pid}.pth' if passage else save_path
+    torch.save(data, final_filename)
 
 
 def read_csv(csv_path) -> pd.DataFrame:
@@ -117,12 +121,18 @@ def read_csv(csv_path) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-    embed_all(dataframe=pd.read_parquet(val_raw_df),
-              embedding=WordEmbeddings('en'),
-              save_path=f'{data_path}/val_embeddings.pth')
+    from flair.embeddings import WordEmbeddings
 
+    # embed_all(dataframe=pd.read_parquet(val_raw_df),
+    #           embedding=WordEmbeddings('en'),
+    #           save_path=f'{data_path}/val_embeddings.pth')
+    embedding = WordEmbeddings('en')
     # ic(clean(pd.read_parquet(train_raw_df), save=f'{df_path}/train_data_cleaned.parquet.gzip'))
-    #
+
     # subsample(pd.read_parquet(f'{df_path}/train_data_cleaned.parquet.gzip'),
     #           save=f'{df_path}/train_debug.parquet.gzip')
-    # embed_queries(pd.read_parquet(train_raw_df), embedding=WordEmbeddings('en'))
+
+    embed_queries(pd.read_parquet(val_raw_df), embedding=embedding,
+                  passage=True, save_path=f'{data_path}/val_p_embeddings',
+                  embedded_pids=pd.read_parquet(train_raw_df).pid.drop_duplicates())
+                  # tokenize_callback=cw1.task1.preprocessing)
