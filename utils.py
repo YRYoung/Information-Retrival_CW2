@@ -7,11 +7,14 @@ from tqdm import tqdm
 
 data_path = './data'
 
+
+val_tsv = f'{data_path}/part2/validation_data.tsv'
+train_tsv = f'{data_path}/part2/train_data.tsv'
+
 dataframe_folder = f'{data_path}/dataframes'
 
 train_raw_df = f'{dataframe_folder}/train_data_raw.parquet.gzip'
 val_raw_df = f'{dataframe_folder}/val_data_raw.parquet.gzip'
-train_cleaned_df = f'{dataframe_folder}/train_data_cleaned.parquet.gzip'
 train_debug_df = f'{dataframe_folder}/train_debug.parquet.gzip'
 
 queries_embeddings = f'{data_path}/q_embeddings.pth'
@@ -35,9 +38,12 @@ def timeit(func):
     return wrapper
 
 
-def load_passages_tensors(folder=passages_embeddings):
+def load_passages_tensors(folder=passages_embeddings, first=None):
     pth_files = os.listdir(folder)
+
     pth_files.sort(key=lambda x: int(x[:-4]))
+    if first is not None:
+        pth_files = pth_files[:first]
     p_tensors_all = {}
     [p_tensors_all.update(torch.load(
         f'{folder}/{name}',
