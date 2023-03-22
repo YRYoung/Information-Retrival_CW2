@@ -1,18 +1,17 @@
 import numpy as np
 import pandas as pd
 import torch
-from torch.utils.data import Dataset, SubsetRandomSampler
-from icecream import ic
+from torch.utils.data import Dataset
 
 
 class CustomDataset(Dataset):
 
     def __init__(self, all_dataframe: pd.DataFrame,
-                 passages_tensors: dict[int, torch.Tensor] | None,
-                 queries_tensors: dict[int, torch.Tensor] | None,
+                 passages_tensors: dict[int, torch.Tensor],
+                 queries_tensors: dict[int, torch.Tensor],
                  return_tensors: str,
                  passages_per_query=100,
-                 generator=None, fake_tensor=True, shuffle_passages=True):
+                 generator=None, fake_tensor=False, shuffle_passages=True):
         super(Dataset).__init__()
         self.shuffle_passages = shuffle_passages
         self.fake_tensor = fake_tensor
@@ -20,7 +19,8 @@ class CustomDataset(Dataset):
 
         self.generator = generator
 
-        self.all_dataframe = all_dataframe  # qid, pid, relevancy
+        self.all_dataframe = {key: [value.reset_index(drop=True, inplace=True), value][1] for key, value in
+                              all_dataframe.groupby('q_idx', sort=False)}  # qid, pid, relevancy
 
         counts = np.unique(all_dataframe.qid.values, return_counts=True)[1]
         self.valid_q_indexes = np.where(counts > passages_per_query)[0]
@@ -46,8 +46,7 @@ class CustomDataset(Dataset):
     def __getitem__(self, q_idx: int):
         q_idx = self.valid_q_indexes[q_idx]
 
-        passage_collection = self.all_dataframe[self.all_dataframe.q_idx == q_idx].copy()
-        passage_collection.reset_index(drop=True, inplace=True)
+        passage_collection = self.all_dataframe[q_idx]
         qid = passage_collection.qid.iloc[0]
 
         num_positives = len(passage_collection[passage_collection.relevancy == 1])
@@ -65,14 +64,21 @@ class CustomDataset(Dataset):
         pids = passage_collection.loc[p_index, 'pid'].values.reshape(-1).tolist()
         #         assert len(pids) == self.passage_per_q, pids
 
+        y = passage_collection.loc[:self.passage_per_q - 1, ['relevancy']].values.reshape(-1)  # (N,)
+
         if self.return_tensors == 'tuple':
             if self.fake_tensor:
-                x = (torch.rand(1, 300), torch.rand(self.passage_per_q, 300))
+                x = [torch.rand(1, 300), torch.rand(self.passage_per_q, 300)]
             else:
                 query = self.q_tensors[qid].reshape(-1, 300)
                 passages = torch.concatenate([self.p_tensors[pid].reshape(-1, 300) for pid in pids])
-                x = (query, passages)
+                x = [query, passages]
 
+            if self.shuffle_passages:
+                shuffle_idx = torch.randperm(self.passage_per_q)
+                y = [shuffle_idx]
+                x[1] = x[1][shuffle_idx, ...]
+            return [x[0], x[1], torch.from_numpy(y)]
         elif self.return_tensors == 'cat':
             if self.fake_tensor:
                 x = torch.rand(self.passage_per_q, 2, 300)
@@ -81,11 +87,13 @@ class CustomDataset(Dataset):
                 passages = torch.concatenate([self.p_tensors[pid].reshape(-1, 300) for pid in pids])
                 x = torch.stack([query, passages], dim=1)  # (N, 2, 300)
 
-        y = passage_collection.loc[:self.passage_per_q - 1, ['relevancy']].values.reshape(-1)  # (N,)
-
-        if self.shuffle_passages:
-            shuffle_idx = torch.randperm(self.passage_per_q)
-        return [x, torch.from_numpy(y)]
+            if self.shuffle_passages:
+                shuffle_idx = torch.randperm(self.passage_per_q)
+                y = [shuffle_idx]
+                x = x[shuffle_idx, ...]
+            return [x, torch.from_numpy(y)]
+        else:
+            raise ValueError
 
 
 class ValidationDataset(Dataset):
@@ -93,22 +101,21 @@ class ValidationDataset(Dataset):
     def __init__(self, all_dataframe: pd.DataFrame,
                  train_p_tensors: dict[int, torch.Tensor],
                  val_p_tensors: dict[int, torch.Tensor],
-
                  queries_tensors: dict[int, torch.Tensor],
-                 return_tensors, return_ids=False, fake_tensor=True):
+                 return_tensors, fake_tensor=True):
         super(Dataset).__init__()
         self.val_p_tensors = val_p_tensors
         self.fake_tensor = fake_tensor
         self.return_tensors = return_tensors
-        self.return_ids = return_ids
-
-        self.all_dataframe = all_dataframe  # qid, pid, relevancy
+        # qid, pid, relevancy
+        self.all_dataframe = {key: [value.reset_index(drop=True, inplace=True), value][1] for key, value in
+                              all_dataframe.groupby('q_idx', sort=False)}
 
         self.p_tensors = train_p_tensors
         self.q_tensors = queries_tensors
 
     def __len__(self):
-        return len(self.self.q_tensors)
+        return len(self.q_tensors)
 
     def get_p_tensor(self, idx):
         try:
@@ -118,30 +125,27 @@ class ValidationDataset(Dataset):
 
     def __getitem__(self, q_idx: int):
 
-        passage_collection = self.all_dataframe[self.all_dataframe.q_idx == q_idx].copy()
-        passage_collection.reset_index(drop=True, inplace=True)
-        qid = passage_collection.qid.iloc[0]
+        passage_collection = self.all_dataframe[q_idx]
 
+        qid = passage_collection.qid.iloc[0]
         pids = passage_collection.loc[:, 'pid'].values.reshape(-1).tolist()
 
         result = []
-        if self.return_ids:
-            result += [(qid, pids)]
         if type(self.return_tensors) is str:
 
             if self.return_tensors == 'tuple':
                 if self.fake_tensor:
                     x = (torch.rand(1, 300), torch.rand(len(pids), 300))
                 else:
-                    query = self.q_tensors[qid].reshape(-1, 300)
+                    query = self.get_p_tensor(qid).reshape(-1, 300)
                     passages = torch.concatenate([self.p_tensors[pid].reshape(-1, 300) for pid in pids])
                     x = (query, passages)
 
             elif self.return_tensors == 'cat':
                 if self.fake_tensor:
-                    x = torch.rand(self.len(pids), 2, 300)
+                    x = torch.rand(len(pids), 2, 300)
                 else:
-                    query = self.q_tensors[qid].reshape(-1).repeat(len(pids), 1)
+                    query = self.get_p_tensor(qid).reshape(-1).repeat(len(pids), 1)
                     passages = torch.concatenate([self.p_tensors[pid].reshape(-1, 300) for pid in pids])
                     x = torch.stack([query, passages], dim=1)  # (N, 2, 300)
 
@@ -149,6 +153,8 @@ class ValidationDataset(Dataset):
             result += [x, torch.from_numpy(y)]
 
         return result
+
+    # def evaluate(self, q_idx: int):
 
 
 if __name__ == '__main__':
