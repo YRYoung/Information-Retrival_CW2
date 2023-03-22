@@ -43,8 +43,8 @@ def eval_dataframe(df: pd.DataFrame, pred, at=[3, 10, 100]):
     ndcgs = np.zeros((len(at), num_queries))
 
     for i, (start, l) in enumerate(zip(idx, counts)):
-        rel_idx = retrieved_relevant[start:start + l]['p_idx'].values + 1
-        precision, ndcg = eval_per_query(rel_idx, at)
+        rel_rank = retrieved_relevant[start:start + l]['p_idx'].values + 1
+        precision, ndcg = eval_per_query(rel_rank, at)
         precisions[:, i] = precision
         ndcgs[:, i] = ndcg
 
@@ -104,8 +104,8 @@ def init_evaluator(at: list = [3, 10, 100], x_val_handler=None, prepare_x=True):
 
 def eval_per_query(relev_rank, at: list[int], log=np.log):
     relev_rank.sort()
-    dcg = 1 / log(1 + relev_rank)
-    # todo: np.cumsum(a)
+
+    dcg = np.cumsum(1 / log(1 + relev_rank))
     precisions, ndcg = np.zeros(len(at)), np.zeros(len(at))
 
     for j, now in enumerate(at):
@@ -114,10 +114,14 @@ def eval_per_query(relev_rank, at: list[int], log=np.log):
         if num_relev == 0:
             continue
 
-        precision = (np.arange(num_relev) + 1) / relev_rank_now
-        precisions[j] = np.sum(precision) / num_relev
+        precision = np.sum((np.arange(num_relev) + 1) / relev_rank_now)
+        precisions[j] = precision / num_relev
 
         ideal_dgc = np.sum(1 / log(2 + np.arange(len(relev_rank))))
-        ndcg[j] = np.sum(dcg[:now]) / ideal_dgc
+        ndcg[j] = dcg[num_relev - 1] / ideal_dgc
 
     return precisions, ndcg
+
+
+if __name__ == '__main__':
+    print(eval_per_query(np.array([2, 3, 99, 32]), at=[2, 3, 4, 5, 7, 80, ]))
