@@ -2,7 +2,6 @@ import os
 
 import torch
 import torch.nn as nn
-from torchsummary import summary
 
 from NN.DocModel import DocCNN
 
@@ -42,6 +41,8 @@ class PytorchCNN(nn.Module):
 
         return rank.reshape(batch_size, passages_per_query)
 
+    # def predict(self,query,passage):
+
 
 class MultiMarginRankingLoss(nn.Module):
     def __init__(self):
@@ -49,7 +50,7 @@ class MultiMarginRankingLoss(nn.Module):
         self._rankloss = nn.MarginRankingLoss()
 
     def forward(self, pred, y):
-        num_q,num_p = y.shape
+        num_q, num_p = y.shape
         loss = torch.zeros(num_q)
         for i in range(num_q):
             rlv_idx = torch.argwhere(y[i, ...] == 1)
@@ -63,14 +64,15 @@ if __name__ == '__main__':
     os.chdir('..')
 
     import yaml
-    from utils import map_location
+
+    from torchsummary import summary
 
     with open('./NN/config.yaml') as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
     # input = (1, 300)
     model = PytorchCNN(config).allto('cuda')
-    # summary(model, [(1, 300), (5, 300)], device='cuda')
+    summary(model, [(1, 300), (5, 300)], device='cuda')
     from torchview import draw_graph
 
     bs = 2
-    model_graph = draw_graph(model, input_size=[(1, 1, 300), (1, 15, 300)], device='cpu', save_graph=True)
+    model_graph = draw_graph(model, input_size=[(1, 1, 300), (1, 15, 300)], device='cuda', save_graph=True)

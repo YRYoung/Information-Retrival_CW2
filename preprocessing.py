@@ -3,7 +3,6 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
-import cw1.task1
 from utils import train_raw_df, val_raw_df
 
 data_path = './data'
@@ -135,4 +134,3 @@ if __name__ == "__main__":
     embed_queries(pd.read_parquet(val_raw_df), embedding=embedding,
                   passage=True, save_path=f'{data_path}/val_p_embeddings',
                   embedded_pids=pd.read_parquet(train_raw_df).pid.drop_duplicates())
-                  # tokenize_callback=cw1.task1.preprocessing)
