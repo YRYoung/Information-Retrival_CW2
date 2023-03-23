@@ -129,7 +129,7 @@ def eval_per_query(relev_rank, at: list[int], log=np.log):
         precision = np.sum((np.arange(num_relev) + 1) / relev_rank_now)
         precisions[j] = precision / num_relev
 
-        ideal_dgc = np.sum(1 / log(2 + np.arange(len(relev_rank))))
+        ideal_dgc = np.sum(1 / log(2 + np.arange(min(len(relev_rank), now))))
         ndcg[j] = dcg[num_relev - 1] / ideal_dgc
 
     return precisions, ndcg
