@@ -77,8 +77,8 @@ def embed_all(dataframe, embedding, save_path):
     torch.save([x, y], save_path)
 
 
-def embed_queries(raw_df: pd.DataFrame, embedding, save_path,
-                  passage=True, embedded_pids=None):
+def embed_q_p(raw_df: pd.DataFrame, embedding, save_path,
+              passage=True, embedded_pids=None):
     from flair.data import Sentence
     id, content = ('pid', 'passage') if passage else ('qid', 'query')
 

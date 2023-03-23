@@ -133,8 +133,7 @@ class DataLoader:
         if dataframe is None:
             dataframe = pd.read_parquet(train_raw_df)
 
-        self.dataset = ValidationDataset(all_dataframe=dataframe,
-                                         val_p_tensors=p_tensors,
+        self.dataset = CustomDataset(all_dataframe=dataframe,
                                          queries_tensors=q_tensors,
                                          passages_per_query=passages_per_query)
 
