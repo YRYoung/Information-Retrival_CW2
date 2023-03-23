@@ -103,6 +103,18 @@ def init_evaluator(at: list = [3, 10, 100], x_val_handler=None, prepare_x=True):
 
 
 def eval_per_query(relev_rank, at: list[int], log=np.log):
+    """
+    Calculate precision and normalized discounted cumulative gain (NDCG) at given ranks.
+
+    Parameters:
+    relev_rank (array-like): array of relevant documents' ranks.
+    at (list of int): ranks to compute precision and NDCG at.
+    log (callable): logarithm function, defaults to numpy logarithm.
+
+    Returns:
+    precisions (numpy.ndarray): array of computed precisions.
+    ndcg (numpy.ndarray): array of computed NDCG.
+    """
     relev_rank.sort()
 
     dcg = np.cumsum(1 / log(1 + relev_rank))
