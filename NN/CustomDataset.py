@@ -115,7 +115,7 @@ class ValidationDataset(Dataset):
         self.q_tensors = queries_tensors
 
     def __len__(self):
-        return len(self.q_tensors)
+        return len(self.all_dataframe)
 
     def get_p_tensor(self, idx):
         try:
