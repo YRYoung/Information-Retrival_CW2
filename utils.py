@@ -7,7 +7,6 @@ from tqdm import tqdm
 
 data_path = './data'
 
-
 val_tsv = f'{data_path}/part2/validation_data.tsv'
 train_tsv = f'{data_path}/part2/train_data.tsv'
 
@@ -19,6 +18,8 @@ train_debug_df = f'{dataframe_folder}/train_debug.parquet.gzip'
 
 queries_embeddings = f'{data_path}/q_embeddings.pth'
 passages_embeddings = f'{data_path}/p_embeddings'
+
+val_passages_embeddings = f'{data_path}/val_p_embeddings'
 
 map_location = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
