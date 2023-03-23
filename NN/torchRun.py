@@ -1,9 +1,10 @@
 import os
 import sys
+
 import numpy as np
 import pandas as pd
 import torch
-import yaml
+from icecream import ic
 from torch import optim
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -24,7 +25,7 @@ def collate(batch):
     p_x = torch.stack(p_x, dim=0)
     q_x = torch.cat(q_x, dim=0)
     y = torch.stack(y, dim=0)
-    return (q_x, p_x), y
+    return (q_x.float(), p_x.float()), y.float()
 
 
 def train_epoch(model, dataloader, optimizer, criterion, writer, total_batch):
@@ -106,7 +107,13 @@ def train_model(config, model, optimizer, total_batch, train_loader, evalset=Non
         print('\ntrain loss = {}'.format(epoch_loss))
 
         if (epoch + 1) % eval_freq == 0:
-            eval_epoch(criterion, evalset, model, writer)
+            avg_precision, avg_ndcg, losses = eval_epoch(criterion, evalset, model, writer)
+            ic(avg_precision, avg_ndcg)
+            _at = ['@3', '@10', '@100']
+            [writer.add_scalar(f'Epoch/Val/mAP{s}', value, epoch) for s, value in zip(_at, avg_precision)]
+            [writer.add_scalar(f'Epoch/Val/NDCG{s}', value, epoch) for s, value in zip(_at, avg_ndcg)]
+            writer.add_scalar(f'Epoch/Val/Loss', losses, epoch)
+            torch.cuda.empty_cache()
 
         if (epoch + 1) % save_freq == 0:
             torch.save({
