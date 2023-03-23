@@ -47,6 +47,7 @@ class PytorchCNN(nn.Module):
 class MultiMarginRankingLoss(nn.Module):
     def __init__(self, config):
         super(MultiMarginRankingLoss, self).__init__()
+
         self._rankloss = nn.MarginRankingLoss()
         self.config = config
         if config['training']['mse']:
@@ -58,8 +59,6 @@ class MultiMarginRankingLoss(nn.Module):
         loss = torch.zeros(num_q)
         for i in range(num_q):
             rlv_idx = torch.argwhere(y[i, ...] == 1)
-            comparer = pred[i, rlv_idx].min().repeat(num_p)
-            loss[i] = self._rankloss(comparer, pred[i], (y[i, ...] != 1).float())
 
             comparer = pred[i, rlv_idx].reshape(-1)
             for j in range(comparer.shape[0]):

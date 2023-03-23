@@ -63,7 +63,7 @@ def train_epoch_2(model, dataloader, optimizer, criterion, writer, total_batch):
     model.train()
     pbar = tqdm(enumerate(dataloader),
                 unit='batch', total=len(dataloader))
-    loss = torch.nan
+
     for i_batch, ((query, passage), y) in pbar:
         torch.cuda.empty_cache()
 
@@ -156,10 +156,7 @@ def eval_epoch(criterion, evalset, model, writer):
     return avg_precision, avg_ndcg, losses / num_queries
 
 
-def init_config():
-    with open('./NN/config.yaml') as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
-
+def init_config(config):
     # seed = config['general']['seed']
 
     os.makedirs(models_save_dir, exist_ok=True)
