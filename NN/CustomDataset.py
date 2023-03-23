@@ -76,9 +76,9 @@ class CustomDataset(Dataset):
 
             if self.shuffle_passages:
                 shuffle_idx = torch.randperm(self.passage_per_q)
-                y = [shuffle_idx]
+                y = y[shuffle_idx]
                 x[1] = x[1][shuffle_idx, ...]
-            return [x[0], x[1], torch.from_numpy(y)]
+            return [x, torch.from_numpy(y)]
         elif self.return_tensors == 'cat':
             if self.fake_tensor:
                 x = torch.rand(self.passage_per_q, 2, 300)
@@ -89,7 +89,7 @@ class CustomDataset(Dataset):
 
             if self.shuffle_passages:
                 shuffle_idx = torch.randperm(self.passage_per_q)
-                y = [shuffle_idx]
+                y = y[shuffle_idx]
                 x = x[shuffle_idx, ...]
             return [x, torch.from_numpy(y)]
         else:
