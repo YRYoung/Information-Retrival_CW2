@@ -146,11 +146,7 @@ def eval_epoch(criterion, evalset, model, writer):
     avg_precision = np.mean(precisions, axis=1)
     avg_ndcg = np.mean(ndcgs, axis=1)
 
-    _at = ['@3', '@10', '@100']
-    [writer.add_scalar(f'Epoch/Val/mAP{s}', value) for s, value in zip(_at, avg_precision)]
-    [writer.add_scalar(f'Epoch/Val/NDCG{s}', value) for s, value in zip(_at, avg_ndcg)]
-    writer.add_scalar(f'Epoch/Val/Loss', losses / num_queries)
-    torch.cuda.empty_cache()
+    return avg_precision, avg_ndcg, losses / num_queries
 
 
 def init_config():
