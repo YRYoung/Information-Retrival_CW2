@@ -13,12 +13,17 @@ class PytorchCNN(nn.Module):
                              output_shape=conf['CNN']['denseUnit'][0])
 
         self.config = conf
-        self.final_dense_layers = nn.Sequential(
-            nn.Linear(conf['CNN']['denseUnit'][0], conf['CNN']['denseUnit'][1]),
-            self.docCNN.activation,
-            nn.Linear(conf['CNN']['denseUnit'][1], 1),
-            nn.Softsign()
-        )
+
+        if conf['training']['2CNN']:
+            self.final_layers = DocCNN(conf, input_shape=(2, conf['CNN']['denseUnit'][0]),
+                                       output_shape=1)
+        else:
+            self.final_layers = nn.Sequential(
+                nn.Linear(conf['CNN']['denseUnit'][0], conf['CNN']['denseUnit'][1]),
+                self.docCNN.activation,
+                nn.Linear(conf['CNN']['denseUnit'][1], 1),
+                nn.Softsign()
+            )
 
     def allto(self, *args, **kwargs):
         self.to(*args, **kwargs)
@@ -35,9 +40,14 @@ class PytorchCNN(nn.Module):
         query = feature[:batch_size, ...].reshape(batch_size, 1, -1)
         passage = feature[batch_size:, ...].reshape(batch_size, passages_per_query, -1)
 
-        rank = (query - passage).reshape(-1, self.config['CNN']['denseUnit'][0])
+        if self.config['training']['2CNN']:
+            query = query.repeat(1, passages_per_query, -1)
+            rank = torch.concatenate([query, passage], dim=2).reshape(-1, 2, self.config['CNN']['denseUnit'][0])
+        else:
 
-        rank = self.final_dense_layers(rank)
+            rank = (query - passage).reshape(-1, self.config['CNN']['denseUnit'][0])
+
+        rank = self.final_layers(rank)
 
         return rank.reshape(batch_size, passages_per_query)
 
