@@ -89,9 +89,10 @@ def train_model(config, model, optimizer, total_batch, train_loader, evalset=Non
                 eval_freq=1000,
                 save_freq=5):
     writer = SummaryWriter(config['general']['logDir'])
-    writer.add_text('learning rate', f"{config['training']['learning_rate']}")
 
-    criterion = MultiMarginRankingLoss()
+    writer.add_text('config', str(config))
+
+    criterion = MultiMarginRankingLoss(config)
 
     for epoch in range(config['training']['init_epoch'] + 1, num_epochs):
         print(f'epoch {epoch}:')
