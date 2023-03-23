@@ -117,11 +117,11 @@ class ValidationDataset(Dataset):
     def __len__(self):
         return len(self.all_dataframe)
 
-    def get_p_tensor(self, idx):
+    def get_p_tensor(self, pid):
         try:
-            return self.p_tensors[idx]
+            return self.p_tensors[pid]
         except KeyError:
-            return self.val_p_tensors[idx]
+            return self.val_p_tensors[pid]
 
     def __getitem__(self, q_idx: int):
 
