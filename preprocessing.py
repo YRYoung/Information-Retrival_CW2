@@ -82,8 +82,8 @@ def embed_q_p(raw_df: pd.DataFrame, embedding, save_path,
     from flair.data import Sentence
     id, content = ('pid', 'passage') if passage else ('qid', 'query')
 
-    sub_df = raw_df[[id, content]].drop_duplicates()
-    del raw_df
+    sub_df = raw_df[[id, content]].drop_duplicates().sort_values(by=id)
+    sub_df.reset_index(inplace=True, drop=True)
     pbar = tqdm(sub_df.itertuples(), total=len(sub_df), unit=content)
 
     data = {}
@@ -131,6 +131,6 @@ if __name__ == "__main__":
     # subsample(pd.read_parquet(f'{df_path}/train_data_cleaned.parquet.gzip'),
     #           save=f'{df_path}/train_debug.parquet.gzip')
 
-    embed_queries(pd.read_parquet(val_raw_df), embedding=embedding,
-                  passage=True, save_path=f'{data_path}/val_p_embeddings',
-                  embedded_pids=pd.read_parquet(train_raw_df).pid.drop_duplicates())
+    embed_q_p(pd.read_parquet(val_raw_df), embedding=embedding,
+              passage=True, save_path=f'{data_path}/val_p_embeddings',
+              embedded_pids=pd.read_parquet(train_raw_df).pid.drop_duplicates().to_list())
