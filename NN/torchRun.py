@@ -1,6 +1,6 @@
 import os
 import sys
-
+import numpy as np
 import pandas as pd
 import torch
 import yaml
@@ -120,8 +120,8 @@ def eval_epoch(criterion, evalset, model, writer):
     model.eval()
     at = [3, 10, 100]
     num_queries = len(evalset)
-    precisions = torch.zeros((len(at), num_queries))
-    ndcgs = torch.zeros((len(at), num_queries))
+    precisions = np.zeros((len(at), num_queries))
+    ndcgs = np.zeros((len(at), num_queries))
     losses = 0.
     for i in range(num_queries):
         (query, passage), y = evalset[i]
@@ -130,7 +130,7 @@ def eval_epoch(criterion, evalset, model, writer):
 
         query = query.to(map_location, non_blocking=True)
         passage = passage.to(map_location, non_blocking=True)
-        y = y.to(map_location, non_blocking=True)
+        y = y.reshape(1, -1).to(map_location, non_blocking=True)
 
         pred = model.forward(query, torch.unsqueeze(passage, 0))
         loss = criterion(pred, y)
@@ -141,11 +141,13 @@ def eval_epoch(criterion, evalset, model, writer):
         precision, ndcg = eval_per_query(relev_rank=relevant_idx.numpy(), at=at)
         precisions[:, i] = precision
         ndcgs[:, i] = ndcg
-    avg_precision = precisions.mean(dim=1)
-    avg_ndcg = ndcgs.mean(dim=1)
+
+    avg_precision = np.mean(precisions, axis=1)
+    avg_ndcg = np.mean(ndcgs, axis=1)
+
     _at = ['@3', '@10', '@100']
-    [writer.add_scalars(f'Epoch/Val/mAP{s}', value) for s, value in zip(_at, avg_precision)]
-    [writer.add_scalars(f'Epoch/Val/NDCG{s}', value) for s, value in zip(_at, avg_ndcg)]
+    [writer.add_scalar(f'Epoch/Val/mAP{s}', value) for s, value in zip(_at, avg_precision)]
+    [writer.add_scalar(f'Epoch/Val/NDCG{s}', value) for s, value in zip(_at, avg_ndcg)]
     writer.add_scalar(f'Epoch/Val/Loss', losses / num_queries)
     torch.cuda.empty_cache()
 
