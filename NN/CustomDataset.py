@@ -11,7 +11,7 @@ class CustomDataset(Dataset):
                  queries_tensors: dict[int, torch.Tensor],
                  return_tensors: str,
                  passages_per_query=100,
-                 generator=None, fake_tensor=False, shuffle_passages=True):
+                 generator=None, fake_tensor=False, shuffle_passages=True, fixed_samples=False):
         super(Dataset).__init__()
         self.shuffle_passages = shuffle_passages
         self.fake_tensor = fake_tensor
@@ -29,6 +29,9 @@ class CustomDataset(Dataset):
         self.passage_per_q = passages_per_query
         self.p_tensors = passages_tensors
         self.q_tensors = queries_tensors
+
+        if fixed_samples:
+            self.select_p_idx = {}
 
     def __len__(self):
         return len(self.valid_q_indexes)
@@ -56,13 +59,16 @@ class CustomDataset(Dataset):
 
         generator = self._set_generator()
 
-        p_index = torch.arange(num_positives).tolist()
+        if hasattr(self, 'select_p_idx'):
+            if num_positives in self.select_p_idx:
+                p_index = self.select_p_idx[num_positives]
+            else:
+                p_index = self._get_p_idx(generator, num_passages, num_positives)
+                self.select_p_idx[num_positives] = p_index
+        else:
+            p_index = self._get_p_idx(generator, num_passages, num_positives)
 
-        p_index += (torch.randperm(num_passages - num_positives, generator=generator) + num_positives).tolist()[
-                   :self.passage_per_q - num_positives]
-        #         assert len(p_index) == self.passage_per_q, (qid, q_idx, num_passages, num_positives)
         pids = passage_collection.loc[p_index, 'pid'].values.reshape(-1).tolist()
-        #         assert len(pids) == self.passage_per_q, pids
 
         y = passage_collection.loc[:self.passage_per_q - 1, ['relevancy']].values.reshape(-1)  # (N,)
 
