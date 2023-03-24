@@ -1,38 +1,39 @@
-CNN:
-  activation: leaky_relu
-  batchNorm:
-    - 1
-    - 1
-    - 1
-  denseUnit:
-    - 512
-    - 128
-  kernels:
-    - 3
-    - 3
-    - 3
-  layers:
-    - 16
-    - 32
-    - 32
-  maxPool:
-    - 1
-    - 1
-    - 0
-  stride:
-    - 1
-    - 1
-    - 1
-general:
-  displayNet: true
-  seed: 0
-training:
-  cv: 1
-  decay: -4
-  dropRate: 0.3
-  learning_rate: 5.e-3
-  init_epoch: -1
-  train: true
-  batch_size: 7
-  passages_per_query: 13
-
+-
+  CNN:
+    activation: leaky_relu
+    batchNorm:
+      - 1
+      - 1
+      - 1
+    denseUnit:
+      - 512
+      - 128
+    kernels:
+      - 3
+      - 3
+      - 3
+    layers:
+      - 16
+      - 32
+      - 32
+    maxPool:
+      - 1
+      - 1
+      - 0
+    stride:
+      - 1
+      - 1
+      - 1
+  general:
+    displayNet: false
+    seed: 0
+  training:
+    mse : 0.3
+    cv: 4
+    decay: -6
+    dropRate: 0.2
+    learning_rate: 5.e-2
+    init_epoch: -1
+    train: true
+    batch_size: 128
+    passages_per_query: 200
