@@ -2,8 +2,10 @@ import os
 
 import torch
 import torch.nn as nn
+from icecream import ic
 
 from NN.DocModel import DocCNN
+from utils import map_location
 
 
 class PytorchCNN(nn.Module):
@@ -69,16 +71,14 @@ class MultiMarginRankingLoss(nn.Module):
         loss = torch.zeros(num_q)
         for i in range(num_q):
             rlv_idx = torch.argwhere(y[i, ...] == 1)
-
             comparer = pred[i, rlv_idx].reshape(-1)
+
             for j in range(comparer.shape[0]):
-                loss[i] += self._rankloss(comparer[j].repeat(num_p), pred[i], (y[i, ...] != 1).float())
-
+                loss[i] += self._rankloss(comparer[j].repeat(num_p), pred[i], (y[i, ...] == 1).float())
         if self.config['training']['mse']:
-            return - (1 - self.w) * loss.mean() + self.w * self._mseloss(pred, y)
+            return (1 - self.w) *( 1 - loss.mean()) + self.w * self._mseloss(pred, y)
         else:
-            return - loss.mean()
-
+            return 1 - loss.mean()
 
 if __name__ == '__main__':
     os.chdir('..')
