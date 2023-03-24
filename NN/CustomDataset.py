@@ -132,22 +132,21 @@ class ValidationDataset(Dataset):
 
         result = []
         if type(self.return_tensors) is str:
-
+            passagess = torch.concatenate([self.get_p_tensor(pid).reshape(-1, 300) for pid in pids])
             if self.return_tensors == 'tuple':
+
                 if self.fake_tensor:
                     x = (torch.rand(1, 300), torch.rand(len(pids), 300))
                 else:
                     query = self.q_tensors[qid].reshape(-1, 300)
-                    passages = torch.concatenate([self.get_p_tensor(pid).reshape(-1, 300) for pid in pids])
-                    x = (query, passages)
+                    x = (query, passagess)
 
             elif self.return_tensors == 'cat':
                 if self.fake_tensor:
                     x = torch.rand(len(pids), 2, 300)
                 else:
                     query = self.q_tensors[qid].reshape(-1).repeat(len(pids), 1)
-                    passages = torch.concatenate([self.get_p_tensor(pid).reshape(-1, 300) for pid in pids])
-                    x = torch.stack([query, passages], dim=1)  # (N, 2, 300)
+                    x = torch.stack([query, passagess], dim=1)  # (N, 2, 300)
 
             y = passage_collection.loc[:, ['relevancy']].values.reshape(-1)  # (N,)
             result += [x, torch.from_numpy(y)]
