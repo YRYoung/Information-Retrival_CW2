@@ -28,16 +28,19 @@
     displayNet: false
     seed: 0
   training:
-    attention: true
-    2CNN: true
+    attention:
+      - true
+      - false
+    2CNN: false
     bce : 0.1
-    cv: 11
+    cv: 14
+    cat_qp: diff
     decay: -7
     dropRate: 0
-    learning_rate: 9.e-3
+    learning_rate: 5.e-3
     init_epoch: -1
     train: true
     batch_size: 256
-    passages_per_query: 20
+    passages_per_query: 200
     list_mle: 0.5
-  note: 'remove list_mle, proven useless, use attention, also used sigmoid intead of sign to map output to [0, 1]'
+  note: 'add attention at the top only one cnn'
