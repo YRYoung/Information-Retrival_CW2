@@ -56,18 +56,16 @@ class PytorchCNN(nn.Module):
         query = feature[:batch_size, ...].reshape(batch_size, 1, -1)
         passage = feature[batch_size:, ...].reshape(batch_size, passages_per_query, -1)
 
-        if self.config['training']['cat'] == 'diff':
-            result = (query - passage)  # .reshape(-1, self.cnn_dense_unit_[0])
-        else:
-            result = (query * passage)
+        result = (query - passage) if self.config['training']['cat_qp'] == 'diff' else (query * passage)
 
-        if self.config['training']['attention']:
-            attention = torch.bmm(passage, passage.transpose(1, 2))  # (n, #p, #p)
-            attention = attention / (self.cnn_dense_unit_[0] ** 0.5)
+        if self.config['training']['attention'][1]:
+            attention = torch.bmm(passage, passage.transpose(1, 2)) / (self.cnn_dense_unit_[0] ** 0.5)
             attention = self.softmax(attention)
-            result = torch.bmm(attention, result)  # (n, #p, dense[0])
+            result = torch.bmm(attention, result)
 
-        result = self.final_layers(result.reshape(-1, self.cnn_dense_unit_[0]))
+        result_shape = (-1, 1, self.cnn_dense_unit_[0]) if self.config['training']['2CNN'] else (
+            -1, self.cnn_dense_unit_[0])
+        result = self.final_layers(result.reshape(result_shape))
 
         return result.reshape(batch_size, passages_per_query)
 
