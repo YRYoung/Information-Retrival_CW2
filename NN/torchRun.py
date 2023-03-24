@@ -29,37 +29,6 @@ def collate(batch):
     return (q_x.float(), p_x.float()), y.float()
 
 
-def train_epoch(model, dataloader, optimizer, criterion, writer, total_batch):
-    losses = torch.zeros(len(dataloader)).to(map_location)
-    model.train()
-    pbar = tqdm(enumerate(dataloader),
-                unit='batch', total=len(dataloader))
-    for i_batch, (x_batch, y_batch) in pbar:
-        torch.cuda.empty_cache()
-
-        y_batch = y_batch.view(-1, 1)
-        x_batch = x_batch.view(-1, 2, 300)
-
-        y_batch = y_batch.to(map_location, non_blocking=True)
-        x_batch = x_batch.to(map_location, non_blocking=True)
-
-        optimizer.zero_grad()
-
-        pred = model.forward(x_batch)
-        # ic(pred)
-        loss = criterion(pred, y_batch)
-        losses[i_batch] = loss.detach()
-
-        loss.backward()
-        optimizer.step()
-
-        writer.add_scalar(f'Batch/Loss/train', losses[i_batch], total_batch[0])
-        pbar.set_postfix({'loss': loss.detach()})
-        total_batch[0] += 1
-
-    return losses
-
-
 def train_epoch_2(model, dataloader, optimizer, criterion, writer, total_batch):
     model.train()
     pbar = tqdm(enumerate(dataloader),
@@ -88,7 +57,7 @@ def train_epoch_2(model, dataloader, optimizer, criterion, writer, total_batch):
 
 
 def train_model(config, model, optimizer, total_batch, train_loader, evalset=None, num_epochs=10,
-                eval_freq=1000,
+                eval_freq=1,
                 save_freq=5):
     writer = SummaryWriter(config['general']['logDir'])
 
@@ -108,7 +77,7 @@ def train_model(config, model, optimizer, total_batch, train_loader, evalset=Non
         print('\ntrain loss = {}'.format(epoch_loss))
 
         if (epoch + 1) % eval_freq == 0:
-            avg_precision, avg_ndcg, losses = eval_epoch(criterion, evalset, model, writer)
+            avg_precision, avg_ndcg, losses = eval_epoch(criterion, evalset, model)
             ic(avg_precision, avg_ndcg)
             _at = ['@3', '@10', '@100']
             [writer.add_scalar(f'Epoch/Val/mAP{s}', value, epoch) for s, value in zip(_at, avg_precision)]
@@ -125,7 +94,7 @@ def train_model(config, model, optimizer, total_batch, train_loader, evalset=Non
     return model.eval()  # return trained model
 
 
-def eval_epoch(criterion, evalset, model, writer):
+def eval_epoch(criterion, evalset, model):
     model.eval()
     at = [3, 10, 100]
     num_queries = len(evalset)
@@ -137,9 +106,9 @@ def eval_epoch(criterion, evalset, model, writer):
 
         torch.cuda.empty_cache()
 
-        query = query.to(map_location, non_blocking=True)
-        passage = passage.to(map_location, non_blocking=True)
-        y = y.reshape(1, -1).to(map_location, non_blocking=True)
+        query = query.to(map_location, non_blocking=True).float()
+        passage = passage.to(map_location, non_blocking=True).float()
+        y = y.reshape(1, -1).to(map_location, non_blocking=True).float()
 
         pred = model.forward(query, torch.unsqueeze(passage, 0))
         loss = criterion(pred, y)
@@ -147,7 +116,7 @@ def eval_epoch(criterion, evalset, model, writer):
 
         relevant_idx = torch.where(y[..., torch.argsort(pred)] == 1)[2].reshape(-1) + 1
 
-        precision, ndcg = eval_per_query(relev_rank=relevant_idx.numpy(), at=at)
+        precision, ndcg = eval_per_query(relev_rank=relevant_idx.cpu().numpy(), at=at)
         precisions[:, i] = precision
         ndcgs[:, i] = ndcg
 
@@ -199,7 +168,7 @@ def model_file_name(epoch, config):
 if getattr(sys, 'gettrace', None):
     print('Debugging')
 if __name__ == "__main__":
-    print(f'training in {map_location}')
+    print(f'training on {map_location}')
 
 
 # config
