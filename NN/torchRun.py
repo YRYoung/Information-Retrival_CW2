@@ -4,6 +4,7 @@ import sys
 import numpy as np
 import pandas as pd
 import torch
+
 from icecream import ic
 from torch import optim
 from torch.utils.data import DataLoader
@@ -200,7 +201,16 @@ if getattr(sys, 'gettrace', None):
 if __name__ == "__main__":
     print(f'training in {map_location}')
 
-    config = init_config()
+
+# config
+    import sys
+    import yaml
+    sys.path.append('..')
+    with open('./NN/config.yaml') as f:
+        config_all = yaml.load(f, Loader=yaml.FullLoader)
+
+
+    config = init_config(config_all[0])
 
     train_df = pd.read_parquet(train_raw_df)
     val_df = pd.read_parquet(val_raw_df)
@@ -216,8 +226,7 @@ if __name__ == "__main__":
                                 return_tensors='tuple', fake_tensor=True,
                                 train_p_tensors=None,
                                 val_p_tensors=None,
-                                queries_tensors=None,
-                                return_ids=False)
+                                queries_tensors=None)
     train_data_loader = DataLoader(trainset,
                                    batch_size=config['training']['batch_size'],
                                    shuffle=True, num_workers=0,
