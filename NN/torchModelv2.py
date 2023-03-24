@@ -69,7 +69,7 @@ class MultiMarginRankingLoss(nn.Module):
 
     def forward(self, pred, y):
         num_q, num_p = y.shape
-        loss = torch.zeros(num_q)
+        loss = torch.zeros(num_q, device=map_location)
         for i in range(num_q):
             rlv_idx = torch.argwhere(y[i, ...] == 1)
             comparer = pred[i, rlv_idx].reshape(-1)
