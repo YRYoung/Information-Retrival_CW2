@@ -49,7 +49,7 @@ def train_epoch_2(model, dataloader, optimizer, criterion, writer, total_batch):
         loss.backward()
         optimizer.step()
 
-        writer.add_scalar(f'Batch/Loss/train', loss.detach(), total_batch[0])
+        writer.add_scalar(f'Loss/Batch/train', loss.detach(), total_batch[0])
         pbar.set_postfix({'loss': loss.detach()})
         total_batch[0] += 1
 
@@ -73,16 +73,16 @@ def train_model(config, model, optimizer, total_batch, train_loader, evalset=Non
         epoch_loss = train_losses.mean()
         torch.cuda.empty_cache()
 
-        writer.add_scalar(f'Epoch/Loss/train', epoch_loss, epoch)
+        writer.add_scalar(f'Loss/Epoch/train', epoch_loss, epoch)
         print('\ntrain loss = {}'.format(epoch_loss))
 
         if (epoch + 1) % eval_freq == 0:
             avg_precision, avg_ndcg, losses = eval_epoch(criterion, evalset, model)
             ic(avg_precision, avg_ndcg)
             _at = ['@3', '@10', '@100']
-            [writer.add_scalar(f'Epoch/Val/mAP{s}', value, epoch) for s, value in zip(_at, avg_precision)]
-            [writer.add_scalar(f'Epoch/Val/NDCG{s}', value, epoch) for s, value in zip(_at, avg_ndcg)]
-            writer.add_scalar(f'Epoch/Val/Loss', losses, epoch)
+            [writer.add_scalar(f'Val/mAP{s}', value, epoch) for s, value in zip(_at, avg_precision)]
+            [writer.add_scalar(f'Val/NDCG{s}', value, epoch) for s, value in zip(_at, avg_ndcg)]
+            writer.add_scalar(f'Val/Loss', losses, epoch)
             torch.cuda.empty_cache()
 
         if (epoch + 1) % save_freq == 0:
@@ -170,8 +170,6 @@ if getattr(sys, 'gettrace', None):
 if __name__ == "__main__":
     print(f'training on {map_location}')
 
-
-# config
     import sys
     import yaml
     sys.path.append('..')
