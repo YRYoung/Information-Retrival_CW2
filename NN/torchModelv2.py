@@ -28,11 +28,6 @@ class PytorchCNN(nn.Module):
                 nn.Sigmoid()
             )
 
-    def allto(self, *args, **kwargs):
-        self.to(*args, **kwargs)
-        self.docCNN.to(*args, **kwargs)
-        return self
-
     def forward(self, query, passage):
         batch_size, passages_per_query, _ = passage.shape
         passage = passage.reshape(-1, 300)
@@ -47,15 +42,17 @@ class PytorchCNN(nn.Module):
             query = query.repeat(1, passages_per_query, 1)
             result = torch.concatenate([query, passage], dim=2).reshape(-1, 2, self.cnn_dense_unit_[0])
             result = self.final_layers(result)
+        elif self.config['training']['attention']:
+            result = torch.bmm(query, passage.transpose(1, 2))  # 1.Matmul
+            result = result / torch.pow(self.cnn_dense_unit_[0], 0.5)
+            result = self.softmax(result)
 
-    
+
         else:
             result = (query - passage).reshape(-1, self.cnn_dense_unit_[0])
             result = self.final_layers(result)
 
-        rank = self.final_layers(rank)
-
-        return rank.reshape(batch_size, passages_per_query)
+        return result.reshape(batch_size, passages_per_query)
 
     # def predict(self,query,passage):
 
@@ -69,24 +66,6 @@ class MultiMarginRankingLoss(nn.Module):
         if config['training']['bce']:
             self._bceloss = nn.BCELoss()
             self.bce_w = config['training']['bce']
-
-    def list_mle(self, y_pred, y_true, k=None):
-        # y_pred : batch x n_items
-        # y_true : batch x n_items
-        if k is not None:
-            sublist_indices = (y_pred.shape[1] * torch.rand(size=k)).long()
-            y_pred = y_pred[:, sublist_indices]
-            y_true = y_true[:, sublist_indices]
-
-        _, indices = y_true.sort(descending=True, dim=-1)
-
-        pred_sorted_by_true = y_pred.gather(dim=1, index=indices)
-
-        cumsums = pred_sorted_by_true.exp().flip(dims=[1]).cumsum(dim=1).flip(dims=[1])
-
-        listmle_loss = torch.log(cumsums + 1e-10) - pred_sorted_by_true
-
-        return listmle_loss.sum(dim=1).mean()
 
     def forward(self, pred, y):
         num_q, num_p = y.shape
