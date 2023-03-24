@@ -28,12 +28,16 @@
     displayNet: false
     seed: 0
   training:
-    mse : 0.3
-    cv: 4
-    decay: -6
-    dropRate: 0.2
-    learning_rate: 5.e-2
+    attention: true
+    2CNN: true
+    bce : 0.1
+    cv: 11
+    decay: -7
+    dropRate: 0
+    learning_rate: 9.e-3
     init_epoch: -1
     train: true
-    batch_size: 128
-    passages_per_query: 200
+    batch_size: 256
+    passages_per_query: 20
+    list_mle: 0.5
+  note: 'remove list_mle, proven useless, use attention, also used sigmoid intead of sign to map output to [0, 1]'
