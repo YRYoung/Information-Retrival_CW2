@@ -11,19 +11,20 @@ from utils import map_location
 class PytorchCNN(nn.Module):
     def __init__(self, conf):
         super(PytorchCNN, self).__init__()
-        self.docCNN = DocCNN(conf, input_shape=(1, 300),
-                             output_shape=conf['CNN']['denseUnit'][0])
-
         self.config = conf
+        self.cnn_dense_unit_ = self.config['CNN']['denseUnit']
+
+        self.docCNN = DocCNN(conf, input_shape=(1, 300),
+                             output_shape=self.cnn_dense_unit_[0])
 
         if conf['training']['2CNN']:
-            self.final_layers = DocCNN(conf, input_shape=(2, conf['CNN']['denseUnit'][0]),
+            self.final_layers = DocCNN(conf, input_shape=(2, self.cnn_dense_unit_[0]),
                                        output_shape=1)
         else:
             self.final_layers = nn.Sequential(
-                nn.Linear(conf['CNN']['denseUnit'][0], conf['CNN']['denseUnit'][1]),
+                nn.Linear(self.cnn_dense_unit_[0], self.cnn_dense_unit_[1]),
                 self.docCNN.activation,
-                nn.Linear(conf['CNN']['denseUnit'][1], 1),
+                nn.Linear(self.cnn_dense_unit_[1], 1),
                 nn.Sigmoid()
             )
 
@@ -44,10 +45,13 @@ class PytorchCNN(nn.Module):
 
         if self.config['training']['2CNN']:
             query = query.repeat(1, passages_per_query, 1)
-            rank = torch.concatenate([query, passage], dim=2).reshape(-1, 2, self.config['CNN']['denseUnit'][0])
-        else:
+            result = torch.concatenate([query, passage], dim=2).reshape(-1, 2, self.cnn_dense_unit_[0])
+            result = self.final_layers(result)
 
-            rank = (query - passage).reshape(-1, self.config['CNN']['denseUnit'][0])
+    
+        else:
+            result = (query - passage).reshape(-1, self.cnn_dense_unit_[0])
+            result = self.final_layers(result)
 
         rank = self.final_layers(rank)
 
