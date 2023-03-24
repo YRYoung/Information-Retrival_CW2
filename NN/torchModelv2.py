@@ -12,6 +12,7 @@ class PytorchCNN(nn.Module):
     def __init__(self, conf):
         super(PytorchCNN, self).__init__()
         self.config = conf
+        self.softmax = nn.Softmax(dim=2)
         self.cnn_dense_unit_ = self.config['CNN']['denseUnit']
 
         self.docCNN = DocCNN(conf, input_shape=(1, 300),
@@ -42,11 +43,11 @@ class PytorchCNN(nn.Module):
             query = query.repeat(1, passages_per_query, 1)
             result = torch.concatenate([query, passage], dim=2).reshape(-1, 2, self.cnn_dense_unit_[0])
             result = self.final_layers(result)
+
         elif self.config['training']['attention']:
             result = torch.bmm(query, passage.transpose(1, 2))  # 1.Matmul
             result = result / (self.cnn_dense_unit_[0] ** 0.5)
             result = self.softmax(result)
-
 
         else:
             result = (query - passage).reshape(-1, self.cnn_dense_unit_[0])
