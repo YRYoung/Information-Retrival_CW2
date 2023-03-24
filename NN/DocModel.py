@@ -40,6 +40,7 @@ class DocCNN(nn.Module):
         if config['CNN']['denseUnit'][0] != output_shape:
             self.dense_layers.append(nn.Linear(config['CNN']['denseUnit'][0], output_shape))
 
+        self.dense_layers.append(nn.Sigmoid())
     def forward(self, x):
         for layer in self.cnn_units:
 
