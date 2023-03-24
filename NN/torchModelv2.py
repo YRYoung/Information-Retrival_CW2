@@ -29,8 +29,25 @@ class PytorchCNN(nn.Module):
                 nn.Sigmoid()
             )
 
+        if self.config['training']['attention'][0]:
+            d_inner_hid = 512
+            self.w_1 = nn.Conv1d(300, d_inner_hid, 1)
+            self.w_2 = nn.Conv1d(d_inner_hid, 300, 1)
+            self.layer_norm = nn.LayerNorm(300)
+            self.relu = nn.ReLU()
+
     def forward(self, query, passage):
         batch_size, passages_per_query, _ = passage.shape
+        if self.config['training']['attention'][0]:
+            attention = torch.bmm(query, passage.transpose(1, 2)) / (self.cnn_dense_unit_[0] ** 0.5)
+            attention = self.softmax(attention)
+            result = attention.transpose(1, 2) * passage
+
+            output = self.relu(self.w_1(result.transpose(1, 2)))
+            output = self.w_2(output).transpose(2, 1)
+            output = nn.Dropout()(output)
+            passage = self.layer_norm(self.layer_norm(passage + output))
+
         passage = passage.reshape(-1, 300)
         query = query.reshape(-1, 300)
         feature = torch.cat([query, passage], dim=0).reshape(-1, 1, 300)
