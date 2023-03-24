@@ -44,7 +44,7 @@ class PytorchCNN(nn.Module):
             result = self.final_layers(result)
         elif self.config['training']['attention']:
             result = torch.bmm(query, passage.transpose(1, 2))  # 1.Matmul
-            result = result / torch.pow(self.cnn_dense_unit_[0], 0.5)
+            result = result / (self.cnn_dense_unit_[0] ** 0.5)
             result = self.softmax(result)
 
 
