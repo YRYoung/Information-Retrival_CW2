@@ -19,7 +19,7 @@ class PytorchCNN(nn.Module):
                              output_shape=self.cnn_dense_unit_[0])
 
         if conf['training']['2CNN']:
-            self.final_layers = DocCNN(conf, input_shape=(2, self.cnn_dense_unit_[0]),
+            self.final_layers = DocCNN(conf, input_shape=(1, self.cnn_dense_unit_[0]),
                                        output_shape=1)
         else:
             self.final_layers = nn.Sequential(
@@ -39,19 +39,18 @@ class PytorchCNN(nn.Module):
         query = feature[:batch_size, ...].reshape(batch_size, 1, -1)
         passage = feature[batch_size:, ...].reshape(batch_size, passages_per_query, -1)
 
-        if self.config['training']['2CNN']:
-            query = query.repeat(1, passages_per_query, 1)
-            result = torch.concatenate([query, passage], dim=2).reshape(-1, 2, self.cnn_dense_unit_[0])
-            result = self.final_layers(result)
-
-        elif self.config['training']['attention']:
-            result = torch.bmm(query, passage.transpose(1, 2))  # 1.Matmul
-            result = result / (self.cnn_dense_unit_[0] ** 0.5)
-            result = self.softmax(result)
-
+        if self.config['training']['cat'] == 'diff':
+            result = (query - passage)  # .reshape(-1, self.cnn_dense_unit_[0])
         else:
-            result = (query - passage).reshape(-1, self.cnn_dense_unit_[0])
-            result = self.final_layers(result)
+            result = (query * passage)
+
+        if self.config['training']['attention']:
+            attention = torch.bmm(passage, passage.transpose(1, 2))  # (n, #p, #p)
+            attention = attention / (self.cnn_dense_unit_[0] ** 0.5)
+            attention = self.softmax(attention)
+            result = torch.bmm(attention, result)  # (n, #p, dense[0])
+
+        result = self.final_layers(result.reshape(-1, self.cnn_dense_unit_[0]))
 
         return result.reshape(batch_size, passages_per_query)
 
