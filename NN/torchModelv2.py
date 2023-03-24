@@ -24,7 +24,7 @@ class PytorchCNN(nn.Module):
                 nn.Linear(conf['CNN']['denseUnit'][0], conf['CNN']['denseUnit'][1]),
                 self.docCNN.activation,
                 nn.Linear(conf['CNN']['denseUnit'][1], 1),
-                nn.Softsign()
+                nn.Sigmoid()
             )
 
     def allto(self, *args, **kwargs):
@@ -43,7 +43,7 @@ class PytorchCNN(nn.Module):
         passage = feature[batch_size:, ...].reshape(batch_size, passages_per_query, -1)
 
         if self.config['training']['2CNN']:
-            query = query.repeat(1, passages_per_query, -1)
+            query = query.repeat(1, passages_per_query, 1)
             rank = torch.concatenate([query, passage], dim=2).reshape(-1, 2, self.config['CNN']['denseUnit'][0])
         else:
 
@@ -63,8 +63,26 @@ class MultiMarginRankingLoss(nn.Module):
         self._rankloss = nn.MarginRankingLoss()
         self.config = config
         if config['training']['bce']:
-            self._bceloss = nn.BCEWithLogitsLoss()
-            self.w = config['training']['bce']
+            self._bceloss = nn.BCELoss()
+            self.bce_w = config['training']['bce']
+
+    def list_mle(self, y_pred, y_true, k=None):
+        # y_pred : batch x n_items
+        # y_true : batch x n_items
+        if k is not None:
+            sublist_indices = (y_pred.shape[1] * torch.rand(size=k)).long()
+            y_pred = y_pred[:, sublist_indices]
+            y_true = y_true[:, sublist_indices]
+
+        _, indices = y_true.sort(descending=True, dim=-1)
+
+        pred_sorted_by_true = y_pred.gather(dim=1, index=indices)
+
+        cumsums = pred_sorted_by_true.exp().flip(dims=[1]).cumsum(dim=1).flip(dims=[1])
+
+        listmle_loss = torch.log(cumsums + 1e-10) - pred_sorted_by_true
+
+        return listmle_loss.sum(dim=1).mean()
 
     def forward(self, pred, y):
         num_q, num_p = y.shape
@@ -75,10 +93,12 @@ class MultiMarginRankingLoss(nn.Module):
 
             for j in range(comparer.shape[0]):
                 loss[i] += self._rankloss(comparer[j].repeat(num_p), pred[i], (y[i, ...] == 1).float())
+        result = 1 - loss.mean()
+
         if self.config['training']['bce']:
-            return (1 - self.w) *( 1 - loss.mean()) + self.w * self._bceloss(pred, y)
-        else:
-            return 1 - loss.mean()
+            result = (1 - self.bce_w) * result + self.bce_w * self._bceloss(pred, y)
+        return result
+
 
 if __name__ == '__main__':
     os.chdir('..')
