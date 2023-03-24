@@ -106,9 +106,9 @@ if __name__ == '__main__':
     from torchsummary import summary
 
     with open('./NN/config.yaml') as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+        config = yaml.load(f, Loader=yaml.FullLoader)[0]
     # input = (1, 300)
-    model = PytorchCNN(config).allto('cuda')
+    model = PytorchCNN(config).to('cuda')
     summary(model, [(1, 300), (5, 300)], device='cuda')
     from torchview import draw_graph
 
