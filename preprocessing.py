@@ -78,7 +78,9 @@ def embed_all(dataframe, embedding, save_path):
 
 
 def embed_q_p(raw_df: pd.DataFrame, embedding, save_path,
-              passage=True, embedded_pids=None):
+              passage=True, embedded_pids=None,seperate=None):
+    if seperate is None:
+        seperate=passage
     from flair.data import Sentence
     id, content = ('pid', 'passage') if passage else ('qid', 'query')
 
@@ -101,14 +103,14 @@ def embed_q_p(raw_df: pd.DataFrame, embedding, save_path,
         embedding.embed(sentence)
         data[pid] = torch.stack([token.embedding for token in sentence.tokens]).mean(dim=0)
 
-        if passage and pid % 100000 == 0:
+        if seperate and pid % 100000 == 0:
             file_name = f'{save_path}/{previous_pid}.pth'
             torch.save(data, file_name)
             data = {}
             previous_pid = pid
             pbar.set_postfix({'file_name': file_name})
 
-    final_filename = f'{save_path}/{previous_pid}.pth' if passage else save_path
+    final_filename = f'{save_path}/{previous_pid}.pth' if seperate else save_path
     torch.save(data, final_filename)
 
 
@@ -130,7 +132,9 @@ if __name__ == "__main__":
 
     # subsample(pd.read_parquet(f'{df_path}/train_data_cleaned.parquet.gzip'),
     #           save=f'{df_path}/train_debug.parquet.gzip')
-
-    embed_q_p(pd.read_parquet(val_raw_df), embedding=embedding,
-              passage=True, save_path=f'{data_path}/val_p_embeddings',
-              embedded_pids=pd.read_parquet(train_raw_df).pid.drop_duplicates().to_list())
+    df = pd.read_csv(f'data/part1/candidate_passages_top1000.tsv',
+                     sep='\t', header=None,
+                     names=['qid', 'pid', 'query', 'passage']).drop_duplicates()
+    embed_q_p(df, embedding=embedding,seperate=False,
+              passage=True, save_path=f'{data_path}/part1/passage',
+              embedded_pids=None)
