@@ -101,6 +101,18 @@ class CustomDataset(Dataset):
         else:
             raise ValueError
 
+    # def _get_p_idx(self, generator, num_passages, num_positives):
+    #     p_index = torch.arange(num_positives).tolist()
+    #     p_index += (torch.randperm(num_passages - num_positives, generator=generator) + num_positives).tolist()[
+    #                :self.passage_per_q - num_positives]
+    #     return p_index
+
+    def _get_p_idx(self, generator, num_passages, num_positives):
+        p_index = torch.cat((torch.arange(num_positives),
+                             torch.randperm(num_passages - num_positives, generator=generator)[
+                             :self.passage_per_q - num_positives] + num_positives))
+        return p_index.tolist()
+
 
 class ValidationDataset(Dataset):
 
@@ -168,12 +180,19 @@ if __name__ == '__main__':
 
     df = pd.read_parquet(train_raw_df)
 
-    q_tensors = torch.load(queries_embeddings, map_location=map_location)
-    p_tensors = load_passages_tensors(first=1)
-    dataset = ValidationDataset(df,
-                                val_p_tensors=p_tensors,
-                                queries_tensors=q_tensors,
-                                passages_per_query=7, generator=None)
+    # q_tensors = torch.load(queries_embeddings, map_location=map_location)
+    # p_tensors = load_passages_tensors(first=1)
+    q_tensors = None
+    p_tensors = None
+    dataset = CustomDataset(df,
+                            queries_tensors=q_tensors,
+                            fake_tensor=True,
+                            passages_per_query=5,
+                            passages_tensors=p_tensors,
+                            fixed_samples=True,
+                            return_tensors='tuple',
+
+                            generator=None)
     dataloader = DataLoader(dataset, batch_size=10)
     for i, batch in enumerate(dataloader):
         print(batch)
