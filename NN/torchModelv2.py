@@ -62,9 +62,9 @@ class MultiMarginRankingLoss(nn.Module):
 
         self._rankloss = nn.MarginRankingLoss()
         self.config = config
-        if config['training']['mse']:
-            self._mseloss = nn.BCEWithLogitsLoss()
-            self.w = config['training']['mse']
+        if config['training']['bce']:
+            self._bceloss = nn.BCEWithLogitsLoss()
+            self.w = config['training']['bce']
 
     def forward(self, pred, y):
         num_q, num_p = y.shape
@@ -75,8 +75,8 @@ class MultiMarginRankingLoss(nn.Module):
 
             for j in range(comparer.shape[0]):
                 loss[i] += self._rankloss(comparer[j].repeat(num_p), pred[i], (y[i, ...] == 1).float())
-        if self.config['training']['mse']:
-            return (1 - self.w) *( 1 - loss.mean()) + self.w * self._mseloss(pred, y)
+        if self.config['training']['bce']:
+            return (1 - self.w) *( 1 - loss.mean()) + self.w * self._bceloss(pred, y)
         else:
             return 1 - loss.mean()
 
