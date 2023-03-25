@@ -29,7 +29,7 @@ def collate(batch):
     return (q_x.float(), p_x.float()), y.float()
 
 
-def train_epoch_2(model, dataloader, optimizer, criterion, writer, total_batch):
+def train_epoch(model, dataloader, optimizer, criterion, writer, total_batch):
     model.train()
     pbar = tqdm(enumerate(dataloader),
                 unit='batch', total=len(dataloader))
@@ -67,8 +67,8 @@ def train_model(config, model, optimizer, total_batch, train_loader, evalset=Non
 
     for epoch in range(config['training']['init_epoch'] + 1, num_epochs):
         print(f'epoch {epoch}:')
-        train_losses = train_epoch_2(model, train_loader, optimizer, criterion=criterion,
-                                     writer=writer, total_batch=total_batch)
+        train_losses = train_epoch(model, train_loader, optimizer, criterion=criterion,
+                                   writer=writer, total_batch=total_batch)
 
         epoch_loss = train_losses.mean()
         torch.cuda.empty_cache()
