@@ -9,8 +9,6 @@ class DocCNN(nn.Module):
 
         self.config = config
 
-        # Define the CNN layers
-
         self.activation = nn.LeakyReLU(.2) if config['CNN']['activation'] == 'leaky_relu' else nn.ReLU()
 
         self.cnn_units = nn.ModuleList()
@@ -29,7 +27,7 @@ class DocCNN(nn.Module):
                 self.cnn_units.append(nn.MaxPool1d(kernel_size=2))
 
         # Define the dense layers
-        length = config['CNN']['layers'][-1] * input_shape[1] // sum(config['CNN']['maxPool']) ** 2
+        length = input_shape[1] // 2 ** sum(config['CNN']['maxPool']) * config['CNN']['layers'][-1]
 
         self.dense_layers = nn.Sequential(
             nn.Flatten(),
@@ -41,10 +39,10 @@ class DocCNN(nn.Module):
             self.dense_layers.append(nn.Linear(config['CNN']['denseUnit'][0], output_shape))
 
         self.dense_layers.append(nn.Sigmoid())
+
     def forward(self, x):
         for layer in self.cnn_units:
-
-                x = layer(x)
+            x = layer(x)
         x = self.dense_layers(x)
         return x
 
@@ -63,6 +61,6 @@ if __name__ == '__main__':
     model = DocCNN(config, (2, 300)).to(map_location)
     summary(model, (2, 300), device='cuda')
     from torchview import draw_graph
-    #
+
     batch_size = 2
     model_graph = draw_graph(model, input_size=(batch_size, 2, 300), device=map_location, save_graph=True)
