@@ -201,7 +201,7 @@ if __name__ == '__main__':
                             return_tensors='tuple',
 
                             generator=None)
-    dataloader = DataLoader(dataset, batch_size=10)
+    dataloader = DataLoader(dataset, batch_size=1000)
     for i, batch in enumerate(dataloader):
         print(batch)
         if i > 5: break
