@@ -29,11 +29,14 @@ class CustomDataset(Dataset):
         self.p_tensors = passages_tensors
         self.q_tensors = queries_tensors
 
+        self.random_ints_excludes = lambda min_val, max_val, exclude, n: np.random.choice(
+            np.delete(np.arange(min_val, max_val + 1), np.where(np.arange(min_val, max_val + 1) == exclude)[0], axis=0),
+            size=n, replace=False)
         if fixed_samples:
             self.select_p_idx = {}
 
     def __len__(self):
-        return len(self.valid_q_indexes)
+        return len(self.all_dataframe)
 
     def _set_generator(self):
 
@@ -46,31 +49,16 @@ class CustomDataset(Dataset):
         return generator
 
     def __getitem__(self, q_idx: int):
-        q_idx = self.valid_q_indexes[q_idx]
-
         passage_collection = self.all_dataframe[q_idx]
         qid = passage_collection.qid.iloc[0]
 
-        num_positives = len(passage_collection[passage_collection.relevancy == 1])
-        assert num_positives > 0
-        num_passages = len(passage_collection)
-        assert num_passages >= self.passage_per_q
-
+        num_passages, num_positives, passage_collection = self.count_current_df(passage_collection, q_idx, qid)
         generator = self._set_generator()
 
-        if hasattr(self, 'select_p_idx'):
-            if num_positives in self.select_p_idx:
-                p_index = self.select_p_idx[num_positives]
-            else:
-                p_index = self._get_p_idx(generator, num_passages, num_positives)
-                self.select_p_idx[num_positives] = p_index
-        else:
-            p_index = self._get_p_idx(generator, num_passages, num_positives)
+        pids = self.get_pids(generator, num_passages, num_positives, passage_collection)
 
-        pids = passage_collection.loc[p_index, 'pid'].values.reshape(-1).tolist()
-
-        y = passage_collection.loc[:self.passage_per_q - 1, ['relevancy']].values.reshape(-1)  # (N,)
-
+        # y = passage_collection.loc[:self.passage_per_q - 1, ['relevancy']].values.reshape(-1)  # (N,)
+        y = np.hstack((np.ones(num_positives), np.zeros(self.passage_per_q - num_positives)))
         if self.return_tensors == 'tuple':
             if self.fake_tensor:
                 x = [torch.rand(1, 300), torch.rand(self.passage_per_q, 300)]
@@ -100,11 +88,32 @@ class CustomDataset(Dataset):
         else:
             raise ValueError
 
-    # def _get_p_idx(self, generator, num_passages, num_positives):
-    #     p_index = torch.arange(num_positives).tolist()
-    #     p_index += (torch.randperm(num_passages - num_positives, generator=generator) + num_positives).tolist()[
-    #                :self.passage_per_q - num_positives]
-    #     return p_index
+    def get_pids(self, generator, num_passages, num_positives, passage_collection):
+        if hasattr(self, 'select_p_idx'):
+            if (num_passages, num_positives) in self.select_p_idx:
+                p_index = self.select_p_idx[(num_passages, num_positives)]
+            else:
+                p_index = self._get_p_idx(generator, num_passages, num_positives)
+                self.select_p_idx[(num_passages, num_positives)] = p_index
+        else:
+            p_index = self._get_p_idx(generator, num_passages, num_positives)
+        pids = passage_collection.loc[p_index, 'pid'].values.reshape(-1).tolist()
+        return pids
+
+    def count_current_df(self, passage_collection, q_idx, qid):
+        num_positives = len(passage_collection[passage_collection.relevancy == 1])
+        num_passages = len(passage_collection)
+
+        # p = [self.all_dataframe[t].iloc[0].pid for t in temp]
+        if num_passages < self.passage_per_q:
+            temp = self.random_ints_excludes(0, len(self), q_idx, self.passage_per_q - num_passages)
+            new_data = [{'qid': qid, 'pid': p, 'relevancy': 0, } for p in
+                        [self.all_dataframe[t].iloc[0].pid for t in temp]]
+            self.all_dataframe[q_idx] = pd.concat([self.all_dataframe[q_idx], pd.DataFrame(new_data)],
+                                                  ignore_index=True)
+            passage_collection = self.all_dataframe[q_idx]
+            num_passages = len(passage_collection)
+        return num_passages, num_positives, passage_collection
 
     def _get_p_idx(self, generator, num_passages, num_positives):
         p_index = torch.cat((torch.arange(num_positives),
