@@ -80,9 +80,9 @@ def train_model(config, model, optimizer, total_batch, train_loader, evalset=Non
             avg_precision, avg_ndcg, losses = eval_epoch(criterion, evalset, model)
             ic(avg_precision, avg_ndcg)
             _at = ['@3', '@10', '@100']
-            [writer.add_scalar(f'Val/mAP{s}', value, epoch) for s, value in zip(_at, avg_precision)]
-            [writer.add_scalar(f'Val/NDCG{s}', value, epoch) for s, value in zip(_at, avg_ndcg)]
-            writer.add_scalar(f'Val/Loss', losses, epoch)
+            [writer.add_scalar(f'mAP/{s}', value, epoch) for s, value in zip(_at, avg_precision)]
+            [writer.add_scalar(f'NDCG/{s}', value, epoch) for s, value in zip(_at, avg_ndcg)]
+            writer.add_scalar(f'Loss/Epoch/val', losses, epoch)
             torch.cuda.empty_cache()
 
         if (epoch + 1) % save_freq == 0:
