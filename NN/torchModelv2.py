@@ -76,7 +76,7 @@ class MultiMarginRankingLoss(nn.Module):
     def __init__(self, config):
         super(MultiMarginRankingLoss, self).__init__()
 
-        self._rankloss = nn.MarginRankingLoss()
+        self._rankloss = nn.MarginRankingLoss(reduction='sum')
         self.config = config
         if config['training']['bce']:
             self._bceloss = nn.BCELoss()
