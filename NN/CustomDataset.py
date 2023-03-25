@@ -11,19 +11,18 @@ class CustomDataset(Dataset):
                  queries_tensors: dict[int, torch.Tensor],
                  return_tensors: str,
                  passages_per_query=100,
-                 generator=None, fake_tensor=False, shuffle_passages=True, fixed_samples=False):
+                 generator=None, fake_tensor=False,
+                 shuffle_passages=True, fixed_samples=False, auto_amend=True):
         super(Dataset).__init__()
+        self.auto_amend = auto_amend
         self.shuffle_passages = shuffle_passages
         self.fake_tensor = fake_tensor
         self.return_tensors = return_tensors
 
         self.generator = generator
 
-        self.all_dataframe = {key: [value.reset_index(drop=True, inplace=True), value][1] for key, value in
-                              all_dataframe.groupby('q_idx', sort=False)}  # qid, pid, relevancy
-
-        counts = np.unique(all_dataframe.qid.values, return_counts=True)[1]
-        self.valid_q_indexes = np.where(counts > passages_per_query)[0]
+        self.all_dataframe = [[value.reset_index(drop=True, inplace=True), value][1] for key, value in
+                              all_dataframe.groupby('q_idx', sort=False)]  # qid, pid, relevancy
 
         assert passages_per_query >= 5
         self.passage_per_q = passages_per_query
