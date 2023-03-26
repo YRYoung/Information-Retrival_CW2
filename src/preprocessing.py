@@ -3,9 +3,9 @@ import pandas as pd
 import torch
 from tqdm import tqdm
 
-from utils import train_raw_df, val_raw_df
+from src.utils import train_raw_df
 
-data_path = './data'
+data_path = '../data'
 
 output_path = f'{data_path}/temp1'
 df_path = f'{data_path}/dataframes'
@@ -132,7 +132,7 @@ if __name__ == "__main__":
 
     # subsample(pd.read_parquet(f'{df_path}/train_data_cleaned.parquet.gzip'),
     #           save=f'{df_path}/train_debug.parquet.gzip')
-    df = pd.read_csv(f'data/part1/candidate_passages_top1000.tsv',
+    df = pd.read_csv(f'../data/part1/candidate_passages_top1000.tsv',
                      sep='\t', header=None,
                      names=['qid', 'pid', 'query', 'passage']).drop_duplicates()
     embed_q_p(df, embedding=embedding,seperate=False,

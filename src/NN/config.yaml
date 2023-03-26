@@ -6,8 +6,8 @@
       - 1
       - 1
     denseUnit:
+      - 1024
       - 512
-      - 128
     kernels:
       - 3
       - 3
@@ -15,7 +15,7 @@
     layers:
       - 16
       - 32
-      - 32
+      - 64
     maxPool:
       - 1
       - 1
@@ -24,6 +24,9 @@
       - 1
       - 1
       - 1
+  Query_Sequential:
+    - 128
+    - 256
   general:
     displayNet: false
     seed: 0
@@ -32,15 +35,15 @@
       - true
       - false
     2CNN: false
+    fixed_samples: true
     bce : 0.1
-    cv: 14
+    cv: 25
     cat_qp: diff
-    decay: -7
+    decay: 1.e-7
     dropRate: 0
-    learning_rate: 5.e-3
+    learning_rate: 5.e-2
     init_epoch: -1
     train: true
     batch_size: 256
     passages_per_query: 200
-    list_mle: 0.5
-  note: 'add attention at the top only one cnn'
+  note: '试图增加layers'

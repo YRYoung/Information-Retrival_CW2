@@ -2,10 +2,9 @@ import os
 
 import torch
 import torch.nn as nn
-from icecream import ic
 
-from NN.DocModel import DocCNN
-from utils import map_location
+from src.NN.DocModel import DocCNN
+from src.utils import map_location
 
 
 class PytorchCNN(nn.Module):
@@ -113,7 +112,7 @@ class MultiMarginRankingLoss(nn.Module):
 
 
 if __name__ == '__main__':
-    os.chdir('..')
+    os.chdir('../..')
 
     import yaml
 

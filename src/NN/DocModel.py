@@ -32,11 +32,14 @@ class DocCNN(nn.Module):
         self.dense_layers = nn.Sequential(
             nn.Flatten(),
             nn.Linear(length, config['CNN']['denseUnit'][0]),
+            nn.Flatten(),
             self.activation,
+            nn.Linear(config['CNN']['denseUnit'][0], config['CNN']['denseUnit'][1]),
             nn.Dropout(config['training']['dropRate'])
         )
-        if config['CNN']['denseUnit'][0] != output_shape:
-            self.dense_layers.append(nn.Linear(config['CNN']['denseUnit'][0], output_shape))
+        if config['CNN']['denseUnit'][1] != output_shape:
+            self.dense_layers.append(self.activation)
+            self.dense_layers.append(nn.Linear(config['CNN']['denseUnit'][1], output_shape))
 
         self.dense_layers.append(nn.Sigmoid())
 
@@ -52,11 +55,11 @@ if __name__ == '__main__':
 
     from torchsummary import summary
 
-    from utils import map_location
+    from src.utils import map_location
 
-    os.chdir('..')
+    os.chdir('../..')
     with open('./NN/config.yaml') as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+        config = yaml.load(f, Loader=yaml.FullLoader)[0]
 
     model = DocCNN(config, (2, 300)).to(map_location)
     summary(model, (2, 300), device='cuda')

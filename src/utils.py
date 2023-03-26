@@ -3,9 +3,10 @@ import time
 from functools import wraps
 
 import torch
+from icecream import ic
 from tqdm import tqdm
 
-data_path = './data'
+data_path = '../data'
 
 val_tsv = f'{data_path}/part2/validation_data.tsv'
 train_tsv = f'{data_path}/part2/train_data.tsv'
@@ -50,3 +51,25 @@ def load_passages_tensors(folder=passages_embeddings, first=None):
         f'{folder}/{name}',
         map_location=map_location)) for name in tqdm(pth_files)]
     return p_tensors_all
+
+
+import bisect
+
+
+# todo
+class TensorLoader:
+
+    def __init__(self):
+        import os
+        import re
+
+        self.files = os.listdir(passages_embeddings)
+        self.indices = [int(f[:-4]) for f in self.files]
+
+    def __getitem__(self, pid):
+        return bisect.bisect_left(self.indices, pid)
+
+
+if __name__ == '__main__':
+    # ic(TensorLoader()[12])
+    os.listdir(passages_embeddings)

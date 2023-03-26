@@ -12,9 +12,9 @@ from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from CustomDataset import ValidationDataset, CustomDataset
-from NN.torchModelv2 import PytorchCNN, MultiMarginRankingLoss
-from eval import eval_per_query
-from utils import data_path, train_raw_df, map_location, val_raw_df
+from src.NN.torchModelv2 import PytorchCNN, MultiMarginRankingLoss
+from src.eval import eval_per_query
+from src.utils import data_path, train_raw_df, map_location, val_raw_df
 
 models_save_dir = f'{data_path}/models'
 log_root_dir = f'{data_path}/logs'
@@ -176,7 +176,7 @@ if __name__ == "__main__":
     import sys
     import yaml
 
-    sys.path.append('..')
+    sys.path.append('../..')
     with open('./NN/config.yaml') as f:
         config_all = yaml.load(f, Loader=yaml.FullLoader)
 

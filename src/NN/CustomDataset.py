@@ -183,7 +183,7 @@ class ValidationDataset(Dataset):
 
 
 if __name__ == '__main__':
-    from utils import train_raw_df, queries_embeddings, map_location, load_passages_tensors
+    from src.utils import train_raw_df
     from torch.utils.data import DataLoader
 
     df = pd.read_parquet(train_raw_df)

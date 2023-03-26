@@ -13,16 +13,15 @@ mAP should be a single value regardless of individual query
 https://medium.com/swlh/rank-aware-recsys-evaluation-metrics-5191bba16832
 https://towardsdatascience.com/mean-average-precision-at-k-map-k-clearly-explained-538d8e032d2
 """
-import torch
 from huepy import *
 from pandas import DataFrame
 
 from cw1.task1 import *
 from cw1.task2 import *
 from cw1.task3 import *
-from eval import eval_per_query
+from src.eval import eval_per_query
 from preprocessing import read_csv
-from utils import data_path
+from src.utils import data_path
 
 output_path = f'{data_path}/temp_bm25'
 

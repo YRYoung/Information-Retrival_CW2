@@ -62,7 +62,7 @@ def init_evaluator(at: list = [3, 10, 100], x_val_handler=None, prepare_x=True):
     del val_df['pid']
     del val_df['p_idx']
     if prepare_x:
-        x_val = torch.load('./data/val_embeddings.pth')[0]
+        x_val = torch.load('../data/val_embeddings.pth')[0]
 
         if x_val_handler is not None:
             x_val = x_val_handler(x_val)
