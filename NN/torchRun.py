@@ -145,7 +145,10 @@ def load_model(config):
     # init the model
     model = PytorchCNN(conf=config)
     train_config = config['training']
-    optimizer = optim.SGD(model.parameters(), lr=train_config['learning_rate'])
+    # optimizer = optim.SGD(model.parameters(), lr=train_config['learning_rate'])
+    optimizer = optim.NAdam(model.parameters(),
+                            lr=train_config['learning_rate'],
+                            weight_decay=train_config['decay'])
     total_batch = [0, 0]
 
     if train_config['init_epoch'] >= 0:
@@ -172,10 +175,10 @@ if __name__ == "__main__":
 
     import sys
     import yaml
+
     sys.path.append('..')
     with open('./NN/config.yaml') as f:
         config_all = yaml.load(f, Loader=yaml.FullLoader)
-
 
     config = init_config(config_all[0])
 
