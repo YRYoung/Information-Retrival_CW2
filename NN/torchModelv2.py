@@ -29,6 +29,15 @@ class PytorchCNN(nn.Module):
                 nn.Sigmoid()
             )
 
+        self.query_coder = nn.Sequential(
+            nn.Linear(300, self.config['Query_Sequential'][0]),
+            self.docCNN.activation,
+            nn.Linear(self.config['Query_Sequential'][0], self.config['Query_Sequential'][1]),
+            self.docCNN.activation,
+            nn.Linear(self.config['Query_Sequential'][1], self.cnn_dense_unit_[0]),
+            nn.Sigmoid(),
+        )
+
         if self.config['training']['attention'][0]:
             d_inner_hid = 512
             self.w_1 = nn.Conv1d(300, d_inner_hid, 1)
@@ -39,29 +48,34 @@ class PytorchCNN(nn.Module):
     def forward(self, query, passage):
         batch_size, passages_per_query, _ = passage.shape
         if self.config['training']['attention'][0]:
-            attention = torch.bmm(query, passage.transpose(1, 2)) / (self.cnn_dense_unit_[0] ** 0.5)
+            attention = torch.bmm(passage, passage.transpose(1, 2)) / (self.cnn_dense_unit_[0] ** 0.5)
             attention = self.softmax(attention)
-            result = attention.transpose(1, 2) * passage
+            result = torch.bmm(attention.transpose(1, 2), passage)
+            # add & norm
+            result = self.layer_norm(passage + result)
 
+            # feed forward
             output = self.relu(self.w_1(result.transpose(1, 2)))
             output = self.w_2(output).transpose(2, 1)
             output = nn.Dropout()(output)
-            passage = self.layer_norm(self.layer_norm(passage + output))
+            passage = self.layer_norm(passage + output)
 
-        passage = passage.reshape(-1, 300)
+        passage = passage.reshape(-1, 1, 300)
         query = query.reshape(-1, 300)
-        feature = torch.cat([query, passage], dim=0).reshape(-1, 1, 300)
-        feature = self.docCNN.forward(feature)
 
-        query = feature[:batch_size, ...].reshape(batch_size, 1, -1)
-        passage = feature[batch_size:, ...].reshape(batch_size, passages_per_query, -1)
+        # feature = torch.cat([query, passage], dim=0).reshape(-1, 1, 300)
+
+        passage = self.docCNN.forward(passage).reshape(batch_size, passages_per_query, -1)
+
+        query = self.query_coder(query).reshape(batch_size, 1, -1)
+        # passage = feature[batch_size:, ...].reshape(batch_size, passages_per_query, -1)
 
         result = (query - passage) if self.config['training']['cat_qp'] == 'diff' else (query * passage)
 
-        if self.config['training']['attention'][1]:
-            attention = torch.bmm(passage, passage.transpose(1, 2)) / (self.cnn_dense_unit_[0] ** 0.5)
-            attention = self.softmax(attention)
-            result = torch.bmm(attention, result)
+        # if self.config['training']['attention'][1]:
+        #     attention = torch.bmm(passage, passage.transpose(1, 2)) / (self.cnn_dense_unit_[0] ** 0.5)
+        #     attention = self.softmax(attention)
+        #     result = torch.bmm(attention, result)
 
         result_shape = (-1, 1, self.cnn_dense_unit_[0]) if self.config['training']['2CNN'] else (
             -1, self.cnn_dense_unit_[0])
@@ -84,14 +98,14 @@ class MultiMarginRankingLoss(nn.Module):
 
     def forward(self, pred, y):
         num_q, num_p = y.shape
-        loss = torch.zeros(num_q, device=map_location)
+        loss = torch.zeros(num_q, device=map_location).float()
         for i in range(num_q):
             rlv_idx = torch.argwhere(y[i, ...] == 1)
             comparer = pred[i, rlv_idx].reshape(-1)
 
             for j in range(comparer.shape[0]):
-                loss[i] += self._rankloss(comparer[j].repeat(num_p), pred[i], (y[i, ...] == 1).float())
-        result = 1 - loss.mean()
+                loss[i] += self._rankloss(comparer[j].repeat(num_p), pred[i], (y[i, ...] != 1).float())
+        result = loss.mean()
 
         if self.config['training']['bce']:
             result = (1 - self.bce_w) * result + self.bce_w * self._bceloss(pred, y)
