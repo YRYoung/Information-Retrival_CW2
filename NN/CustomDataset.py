@@ -30,7 +30,7 @@ class CustomDataset(Dataset):
         self.q_tensors = queries_tensors
 
         self.random_ints_excludes = lambda min_val, max_val, exclude, n: np.random.choice(
-            np.delete(np.arange(min_val, max_val + 1), np.where(np.arange(min_val, max_val + 1) == exclude)[0], axis=0),
+            np.delete(np.arange(min_val, max_val), np.where(np.arange(min_val, max_val) == exclude)[0], axis=0),
             size=n, replace=False)
         if fixed_samples:
             self.select_p_idx = {}
